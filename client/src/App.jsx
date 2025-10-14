@@ -2,10 +2,13 @@ import React, { useState } from 'react';
 import FacultyManager from './components/FacultyManager';
 import StudentManager from './components/StudentManager';
 import NoticeManager from './components/NoticeManager';
+import RecommendationEngine from './components/RecommendationEngine';
+import FeedbackManager from './components/FeedbackManager'; 
+import RankingAnalytics from './components/RankingAnalytics'; // NEW IMPORT
 import './index.css';
 
 function App() {
-  const [activeScreen, setActiveScreen] = useState('faculty'); // 'faculty' or 'student'
+  const [activeScreen, setActiveScreen] = useState('faculty'); // 'faculty' is the default screen
 
   const NavButton = ({ screen, label }) => (
     <button
@@ -30,7 +33,9 @@ function App() {
             <NavButton screen="faculty" label="Faculty Management" />
             <NavButton screen="student" label="Student Management" />
             <NavButton screen="management" label="Management Dashboard" />
-            {/* We will add more screens here later, e.g., 'recommendation', 'ranking' */}
+            <NavButton screen="recommendation" label="Recommendation Engine" /> 
+            <NavButton screen="feedback" label="Submit Feedback" /> 
+            <NavButton screen="ranking" label="Ranking Analytics" /> 
           </nav>
         </div>
       </header>
@@ -39,6 +44,9 @@ function App() {
         {activeScreen === 'faculty' && <FacultyManager />}
         {activeScreen === 'student' && <StudentManager />}
         {activeScreen === 'management' && <NoticeManager />}
+        {activeScreen === 'recommendation' && <RecommendationEngine />}
+        {activeScreen === 'feedback' && <FeedbackManager />}
+        {activeScreen === 'ranking' && <RankingAnalytics />}
       </main>
     </div>
   );
