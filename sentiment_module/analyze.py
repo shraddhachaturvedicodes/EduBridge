@@ -1,6 +1,21 @@
 import sys
-from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
+# IMPORTANT: NLTK must be told where to look for data, as Node.js runs from the project root.
+import nltk 
 import json
+import os
+
+# Set the NLTK data path to the current working directory. 
+# Node.js runs from EduBridge/, so we want NLTK data here.
+# This fixes the Data access failure (ModuleNotFoundError).
+try:
+    nltk.data.path.insert(0, os.getcwd())
+    from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
+except LookupError:
+    # This block handles the error if the lexicon is not found, 
+    # ensuring the script doesn't crash completely.
+    print(json.dumps({"sentiment": "Error: NLTK Data Missing"}))
+    sys.exit(1)
+
 
 # Initialize VADER sentiment analyzer
 analyzer = SentimentIntensityAnalyzer()

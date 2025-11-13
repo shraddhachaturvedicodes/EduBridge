@@ -1,55 +1,101 @@
-import React, { useState } from 'react';
-import FacultyManager from './components/FacultyManager';
-import StudentManager from './components/StudentManager';
-import NoticeManager from './components/NoticeManager';
-import RecommendationEngine from './components/RecommendationEngine';
-import FeedbackManager from './components/FeedbackManager'; 
-import RankingAnalytics from './components/RankingAnalytics'; // NEW IMPORT
-import './index.css';
+// client/src/App.jsx
+import React, { Suspense, lazy } from "react";
+import { Routes, Route, Navigate } from "react-router-dom";
+import { AuthProvider, useAuth } from "./context/AuthContext";
+import Loading from "./components/Loading";
+import RequireAuth from "./components/RequireAuth";
+import Navbar from "./components/Navbar";
 
-function App() {
-  const [activeScreen, setActiveScreen] = useState('faculty'); // 'faculty' is the default screen
+// Lazy loaded pages
+const Dashboard = lazy(() => import("./pages/Dashboard"));
+const Login = lazy(() => import("./pages/Login"));
+const Messages = lazy(() => import("./pages/Messages"));
+const Recommendations = lazy(() => import("./pages/Recommendations"));
+const Courses = lazy(() => import("./pages/Courses"));
+const Timetable = lazy(() => import("./pages/Timetable"));
+const Analytics = lazy(() => import("./pages/Analytics"));
+const NotFound = lazy(() => import("./pages/NotFound"));
 
-  const NavButton = ({ screen, label }) => (
-    <button
-      onClick={() => setActiveScreen(screen)}
-      className={`py-2 px-4 rounded-t-lg font-semibold transition-colors 
-        ${activeScreen === screen 
-          ? 'bg-white text-blue-600 shadow-t-lg' // Active style
-          : 'bg-gray-200 text-gray-700 hover:bg-gray-300' // Inactive style
-        }`
-      }
-    >
-      {label}
-    </button>
-  );
-
-  return (
-    <div className="min-h-screen bg-gray-100">
-      <header className="shadow-lg bg-white sticky top-0 z-10">
-        <div className="container mx-auto p-4 flex justify-between items-center">
-          <h1 className="text-2xl font-black text-gray-900">EduBridge <span className="text-blue-600 text-sm font-medium">| DBMS Project</span></h1>
-          <nav className="flex space-x-2">
-            <NavButton screen="faculty" label="Faculty Management" />
-            <NavButton screen="student" label="Student Management" />
-            <NavButton screen="management" label="Management Dashboard" />
-            <NavButton screen="recommendation" label="Recommendation Engine" /> 
-            <NavButton screen="feedback" label="Submit Feedback" /> 
-            <NavButton screen="ranking" label="Ranking Analytics" /> 
-          </nav>
-        </div>
-      </header>
-
-      <main className="pt-8">
-        {activeScreen === 'faculty' && <FacultyManager />}
-        {activeScreen === 'student' && <StudentManager />}
-        {activeScreen === 'management' && <NoticeManager />}
-        {activeScreen === 'recommendation' && <RecommendationEngine />}
-        {activeScreen === 'feedback' && <FeedbackManager />}
-        {activeScreen === 'ranking' && <RankingAnalytics />}
-      </main>
-    </div>
-  );
+// Protected route wrapper
+function ProtectedRoute({ children }) {
+  const { user } = useAuth();
+  if (!user) return <Navigate to="/login" replace />;
+  return children;
 }
 
-export default App;
+export default function App() {
+  return (
+    <AuthProvider>
+      <Suspense fallback={<Loading />}>
+        <Navbar />
+        <Routes>
+          {/* Public */}
+          <Route path="/login" element={<Login />} />
+
+          {/* Dashboard - allow both "/" and "/dashboard" */}
+          <Route
+            path="/"
+            element={
+              <ProtectedRoute>
+                <Dashboard />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/dashboard"
+            element={
+              <ProtectedRoute>
+                <Dashboard />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* Other protected pages (student/faculty only) */}
+          <Route
+            path="/messages"
+            element={
+              <ProtectedRoute>
+                <Messages />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/recommendations"
+            element={
+              <ProtectedRoute>
+                <Recommendations />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/courses"
+            element={
+              <ProtectedRoute>
+                <Courses />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/timetable"
+            element={
+              <ProtectedRoute>
+                <Timetable />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/analytics"
+            element={
+              <ProtectedRoute>
+                <Analytics />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* Fallback */}
+          <Route path="*" element={<NotFound />} />
+        </Routes>
+      </Suspense>
+    </AuthProvider>
+  );
+}

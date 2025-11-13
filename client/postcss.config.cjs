@@ -1,8 +1,9 @@
+// postcss.config.cjs
 module.exports = {
   plugins: {
-    // We use @tailwindcss/postcss here as recommended by the error message
-    // because the direct 'tailwindcss' plugin is deprecated in newer setups.
-    "@tailwindcss/postcss": {}, 
-    "autoprefixer": {},
-  },
-}
+    // use the new Tailwind PostCSS plugin
+    '@tailwindcss/postcss': {},
+    // autoprefixer remains the same
+    autoprefixer: {},
+  }
+};
