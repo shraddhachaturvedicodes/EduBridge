@@ -1,107 +1,108 @@
-// src/pages/Recommendations.jsx
-import React, { useEffect, useState } from 'react';
-import axios from 'axios';
-const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:5000';
+// client/src/pages/Recommendations.jsx
+import React, { useState } from 'react';
+import api from '../axiosInstance';
+
+function TagList({ tags }) {
+  if (!tags) return null;
+  const list = (typeof tags === 'string') ? tags.split(',').map(s => s.trim()).filter(Boolean) : tags;
+  return (
+    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 6 }}>
+      {list.map((t, i) => <div key={i} style={{ background:'#eef6ff', padding:'4px 8px', borderRadius:6, fontSize:12 }}>{t}</div>)}
+    </div>
+  );
+}
 
 export default function Recommendations() {
-  const [students, setStudents] = useState([]);
-  const [selected, setSelected] = useState('');
+  const [query, setQuery] = useState('');
+  const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [recs, setRecs] = useState([]);
-  const [error, setError] = useState('');
+  const [err, setErr] = useState('');
 
-  useEffect(() => {
-    (async () => {
-      try {
-        const res = await axios.get(`${API_BASE}/api/students`);
-        setStudents(Array.isArray(res.data) ? res.data : []);
-      } catch (err) {
-        console.error('Failed to load students', err);
-      }
-    })();
-  }, []);
-
-  async function loadRecommendations(studentId) {
-    setError('');
-    setRecs([]);
-    if (!studentId) return;
+  async function handleSearch(e) {
+    e?.preventDefault?.();
+    const q = query.trim();
+    if (!q) return;
+    setErr('');
     setLoading(true);
     try {
-      const res = await axios.get(`${API_BASE}/api/recommendations/${studentId}?limit=25`);
-      const data = res.data;
-      setRecs(data.recommendations || []);
-    } catch (err) {
-      console.error('Failed to fetch recommendations', err);
-      setError(err?.response?.data?.error || err.message || 'Failed to fetch recommendations');
+      const resp = await api.get('/recommendations', { params: { q, limit: 20 } });
+
+      // server may return { recommendations: [...] } (current backend)
+      // or { results: [...] } (older clients). Support both.
+      const rows = resp?.data?.recommendations ?? resp?.data?.results ?? [];
+
+      // normalize rows: ensure numeric score exists (0..1). Prefer rating or _rating_order.
+      const normalized = (rows || []).map(r => {
+        const rating = (r.rating ?? r._rating_order ?? 0);
+        // Heuristic: if rating looks like 0..1 already, use it; if >1 assume out-of-5 scale.
+        let score = 0;
+        if (typeof rating === 'number') {
+          if (rating <= 1) score = Math.max(0, Math.min(1, rating));
+          else score = Math.max(0, Math.min(1, rating / 5));
+        } else if (typeof rating === 'string' && rating.trim() !== '') {
+          const parsed = parseFloat(rating);
+          if (!Number.isNaN(parsed)) {
+            if (parsed <= 1) score = Math.max(0, Math.min(1, parsed));
+            else score = Math.max(0, Math.min(1, parsed / 5));
+          }
+        }
+        return {
+          ...r,
+          score,
+        };
+      });
+
+      setResults(normalized);
+    } catch (error) {
+      console.error('Recommendation fetch failed', error);
+      setErr(error?.response?.data?.error || error.message || 'Failed to fetch recommendations');
+      setResults([]);
     } finally {
       setLoading(false);
     }
   }
 
   return (
-    <div style={{ paddingBottom: 40 }}>
-      <h2 style={{ marginBottom: 12 }}>Faculty Recommendations</h2>
+    <div style={{ padding: 20 }}>
+      <h2>Teacher Recommendation</h2>
+      <p style={{ color: '#666' }}>Describe your project or learning requirement (e.g. "deep learning for medical imaging, Python & PyTorch"). The system will recommend teachers matching your needs.</p>
 
-      <div className="card" style={{ marginBottom: 16 }}>
-        <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-          <div style={{ flex: 1 }}>
-            <label className="small-muted">Choose student</label>
-            <select value={selected} onChange={(e) => { setSelected(e.target.value); }} style={{ width: '100%', padding: 8, marginTop: 6 }}>
-              <option value="">-- select student --</option>
-              {students.map(s => (
-                <option key={s.student_id ?? s.id} value={s.student_id ?? s.id}>
-                  {s.name} {s.email ? `(${s.email})` : ''}
-                </option>
-              ))}
-            </select>
-          </div>
+      <form onSubmit={handleSearch} style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+        <input value={query} onChange={e => setQuery(e.target.value)} placeholder="E.g. 'NLP, transformers, PyTorch'" style={{ flex: 1, padding: 10 }} />
+        <button type="submit" disabled={loading} style={{ padding: '8px 12px' }}>{loading ? 'Searching...' : 'Find Teachers'}</button>
+      </form>
 
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button className="btn" onClick={() => loadRecommendations(selected)} style={{ background: '#06b6d4', color: '#fff' }}>Get Recommendations</button>
-            <button className="btn" onClick={() => { setSelected(''); setRecs([]); }}>Clear</button>
-          </div>
-        </div>
+      {err && <div style={{ color: 'crimson', marginBottom: 12 }}>{err}</div>}
 
-        {loading && <div style={{ marginTop: 12 }}>Loading recommendations...</div>}
-        {error && <div style={{ marginTop: 12, color: 'red' }}>{error}</div>}
-      </div>
-
-      <div className="card">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div style={{ fontWeight: 700 }}>Recommendations</div>
-          <div style={{ color: '#6b7280' }}>{recs.length} results</div>
-        </div>
-
-        <div style={{ marginTop: 10 }}>
-          {recs.length === 0 ? (
-            <div style={{ color: '#6b7280' }}>No recommendations yet. Choose a student and click "Get Recommendations".</div>
-          ) : (
-            <div style={{ display: 'grid', gap: 10 }}>
-              {recs.map((r, i) => (
-                <div key={r.faculty_id ?? i} style={{ borderTop: '1px solid #f1f5f9', paddingTop: 10 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                    <div>
-                      <div style={{ fontWeight: 700 }}>{r.name} {r.email ? ` — ${r.email}` : ''}</div>
-                      <div style={{ color: '#6b7280', marginTop: 4 }}>{r.designation || r.department || ''}</div>
-                      <div style={{ marginTop: 6, fontSize: 13 }}>Expertise: {Array.isArray(r.expertise_areas) ? r.expertise_areas.join(', ') : (r.expertise_areas || '-')}</div>
-                    </div>
-                    <div style={{ textAlign: 'right' }}>
-                      <div style={{ fontWeight: 800, fontSize: 18 }}>{r.match?.score ?? '-'}</div>
-                      <div style={{ color: '#6b7280', fontSize: 12 }}>score</div>
-                    </div>
-                  </div>
-
-                  <div style={{ marginTop: 8, display: 'flex', gap: 8 }}>
-                    <button className="btn" onClick={() => alert(`Open profile for ${r.name} (faculty id ${r.faculty_id})`)}>View Profile</button>
-                    <button className="btn" onClick={() => alert(`Request meeting with ${r.name}`)} style={{ background: '#06b6d4', color: '#fff' }}>Request Meeting</button>
-                    <div style={{ marginLeft: 'auto', color: '#6b7280', fontSize: 13 }}>
-                      Intersection: {r.match?.intersection_count ?? 0} • Jaccard: {r.match?.jaccard ?? 0}
-                    </div>
-                  </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 360px', gap: 16 }}>
+        <div>
+          {results.length === 0 && <div style={{ color: '#666' }}>No recommendations yet. Try a search above.</div>}
+          {results.map(r => (
+            <div key={r.user_id} style={{ padding: 12, border: '1px solid #eee', borderRadius: 8, marginBottom: 10 }}>
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                <div>
+                  <div style={{ fontWeight: 700 }}>{r.display_name || r.email}</div>
+                  <div style={{ color: '#666', fontSize: 13 }}>{r.role}</div>
                 </div>
-              ))}
+                <div style={{ fontSize: 12, color: '#0a66ff' }}>{(Number(r.score || 0) * 100).toFixed(1)}%</div>
+              </div>
+              <div style={{ marginTop: 8, color: '#444' }}>{r.bio}</div>
+              <TagList tags={r.expertise} />
+              <div style={{ marginTop: 10, display:'flex', gap:8 }}>
+                <a href={`mailto:${r.email}`} style={{ textDecoration:'none' }}><button>Contact</button></a>
+                <button onClick={() => alert('Open teacher profile (implement as needed)')}>View profile</button>
+              </div>
             </div>
-          )}
+          ))}
+        </div>
+
+        <div style={{ background: '#fff', borderRadius:8, padding:12, height: '100%' }}>
+          <h4>Tips for better results</h4>
+          <ul style={{ color: '#666' }}>
+            <li>Include technical keywords: languages, libraries, domains (e.g. "PyTorch, computer vision").</li>
+            <li>Mention domain: "medical imaging", "NLP", "distributed systems".</li>
+            <li>Short sentence works well: "deep learning for satellite imagery using PyTorch".</li>
+          </ul>
         </div>
       </div>
     </div>

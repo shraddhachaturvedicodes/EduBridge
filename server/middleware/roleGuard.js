@@ -1,15 +1,31 @@
 // server/middleware/roleGuard.js
-// Exports a factory `requireRole` that checks req.user.role
-// Usage: const { requireRole } = require('../middleware/roleGuard');
-//        router.post(..., requireRole(['faculty','admin']), handler)
-
-function requireRole(allowed) {
-  // allow either a string role or an array of roles
-  const allowedArr = Array.isArray(allowed) ? allowed : [allowed];
+/**
+ * requireRole - middleware factory to allow only users with specific roles
+ * Usage:
+ *   const { requireRole } = require('../middleware/roleGuard');
+ *   router.post('/', authMiddleware, requireRole(['faculty','admin','management']), handler);
+ */
+function requireRole(allowedRoles = []) {
   return (req, res, next) => {
-    if (!req.user) return res.status(401).json({ error: 'Not authenticated' });
-    if (allowedArr.includes(req.user.role)) return next();
-    return res.status(403).json({ error: 'Forbidden' });
+    try {
+      // If authMiddleware sets req.user, check it
+      const user = req.user || (req.auth && req.auth.user) || null;
+
+      if (!user) {
+        return res.status(401).json({ error: 'Authentication required' });
+      }
+
+      const role = (user.role || '').toLowerCase();
+      const normalizedAllowed = allowedRoles.map(r => (r || '').toLowerCase());
+
+      if (!normalizedAllowed.includes(role)) {
+        return res.status(403).json({ error: 'Forbidden: insufficient privileges' });
+      }
+
+      next();
+    } catch (err) {
+      next(err);
+    }
   };
 }
 

@@ -27,4 +27,18 @@ router.get('/', authMiddleware, async (req, res) => {
   }
 });
 
+// GET single user profile
+router.get('/:id', authMiddleware, async (req, res) => {
+  try {
+    const id = req.params.id;
+    const r = await pool.query('SELECT user_id, email, display_name, role, education, expertise, created_on FROM users WHERE user_id=$1', [id]);
+    if (!r.rows.length) return res.status(404).json({ error: 'User not found' });
+    return res.json({ user: r.rows[0] });
+  } catch (err) {
+    console.error('User profile error', err);
+    return res.status(500).json({ error: 'DB error' });
+  }
+});
+
+
 module.exports = router;

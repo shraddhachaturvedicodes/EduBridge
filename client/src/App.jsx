@@ -1,10 +1,10 @@
 // client/src/App.jsx
 import React, { Suspense, lazy } from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
-import { AuthProvider, useAuth } from "./context/AuthContext";
+import { useAuth, AuthProvider } from "./context/AuthContext";
 import Loading from "./components/Loading";
-import RequireAuth from "./components/RequireAuth";
 import Navbar from "./components/Navbar";
+import LeftNav from "./components/LeftNav";
 
 // Lazy loaded pages
 const Dashboard = lazy(() => import("./pages/Dashboard"));
@@ -16,28 +16,66 @@ const Timetable = lazy(() => import("./pages/Timetable"));
 const Analytics = lazy(() => import("./pages/Analytics"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
-// Protected route wrapper
+// Optional management pages you mentioned earlier
+const FacultyManagement = lazy(() => import("./pages/FacultyManagement"));
+const StudentManagement = lazy(() => import("./pages/StudentManagement"));
+
+// NEW: feedback page (student feedback manager)
+const FeedbackManager = lazy(() => import("./pages/FeedbackManager"));
+
+/**
+ * ProtectedRoute: small wrapper that checks auth context and redirects
+ * to /login when there is no logged-in user. Shows a simple Loading UI
+ * while auth initializes to avoid flicker or unnecessary requests.
+ */
 function ProtectedRoute({ children }) {
-  const { user } = useAuth();
+  const { user, isLoading } = useAuth();
+
+  if (isLoading) return <Loading />;
   if (!user) return <Navigate to="/login" replace />;
+
   return children;
+}
+
+/**
+ * ProtectedLayout: layout for protected pages that should show the left sidebar.
+ * It renders LeftNav on the left and the page content on the right.
+ *
+ * Use it as: element={<ProtectedLayout><MyPage/></ProtectedLayout>}
+ */
+function ProtectedLayout({ children }) {
+  return (
+    <div style={{ display: "flex", minHeight: "100vh", gap: 20 }}>
+      {/* Left sidebar (consistent across all protected pages) */}
+      <LeftNav style={{ flex: "0 0 220px", margin: 20 }} />
+
+      {/* Main area: navbar is above so we only place page content here */}
+      <main style={{ flex: 1, padding: 20 }}>
+        {children}
+      </main>
+    </div>
+  );
 }
 
 export default function App() {
   return (
     <AuthProvider>
       <Suspense fallback={<Loading />}>
+        {/* Global top navbar (keeps working behavior) */}
         <Navbar />
+
         <Routes>
           {/* Public */}
           <Route path="/login" element={<Login />} />
 
-          {/* Dashboard - allow both "/" and "/dashboard" */}
+          {/* Protected routes with left sidebar layout */}
           <Route
             path="/"
             element={
               <ProtectedRoute>
-                <Dashboard />
+                <ProtectedLayout>
+                  <Dashboard />
+                </ProtectedLayout>
               </ProtectedRoute>
             }
           />
@@ -45,55 +83,114 @@ export default function App() {
             path="/dashboard"
             element={
               <ProtectedRoute>
-                <Dashboard />
+                <ProtectedLayout>
+                  <Dashboard />
+                </ProtectedLayout>
               </ProtectedRoute>
             }
           />
 
-          {/* Other protected pages (student/faculty only) */}
           <Route
             path="/messages"
             element={
               <ProtectedRoute>
-                <Messages />
+                <ProtectedLayout>
+                  <Messages />
+                </ProtectedLayout>
               </ProtectedRoute>
             }
           />
+
           <Route
             path="/recommendations"
             element={
               <ProtectedRoute>
-                <Recommendations />
+                <ProtectedLayout>
+                  <Recommendations />
+                </ProtectedLayout>
               </ProtectedRoute>
             }
           />
+
           <Route
             path="/courses"
             element={
               <ProtectedRoute>
-                <Courses />
+                <ProtectedLayout>
+                  <Courses />
+                </ProtectedLayout>
               </ProtectedRoute>
             }
           />
+
           <Route
             path="/timetable"
             element={
               <ProtectedRoute>
-                <Timetable />
+                <ProtectedLayout>
+                  <Timetable />
+                </ProtectedLayout>
               </ProtectedRoute>
             }
           />
+
           <Route
             path="/analytics"
             element={
               <ProtectedRoute>
-                <Analytics />
+                <ProtectedLayout>
+                  <Analytics />
+                </ProtectedLayout>
+              </ProtectedRoute>
+            }
+          />
+
+          {/* Feedback page (students submit feedback / management view) */}
+          <Route
+            path="/feedback"
+            element={
+              <ProtectedRoute>
+                <ProtectedLayout>
+                  <FeedbackManager />
+                </ProtectedLayout>
+              </ProtectedRoute>
+            }
+          />
+
+          {/* Management pages (only visible/accessible to admin via LeftNav items) */}
+          <Route
+            path="/faculty-management"
+            element={
+              <ProtectedRoute>
+                <ProtectedLayout>
+                  <FacultyManagement />
+                </ProtectedLayout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/student-management"
+            element={
+              <ProtectedRoute>
+                <ProtectedLayout>
+                  <StudentManagement />
+                </ProtectedLayout>
               </ProtectedRoute>
             }
           />
 
           {/* Fallback */}
-          <Route path="*" element={<NotFound />} />
+          <Route
+            path="*"
+            element={
+              <ProtectedRoute>
+                <ProtectedLayout>
+                  <NotFound />
+                </ProtectedLayout>
+              </ProtectedRoute>
+            }
+          />
+
         </Routes>
       </Suspense>
     </AuthProvider>

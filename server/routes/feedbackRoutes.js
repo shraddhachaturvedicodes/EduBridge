@@ -1,54 +1,63 @@
 // server/routes/feedbackRoutes.js
 const express = require('express');
 const router = express.Router();
-const authMiddleware = require('../middleware/authMiddleware'); // optional auth for posting
-const { pool } = require('../db'); // expects server/db.js to export { pool }
+const { pool } = require('../db');
+const authMiddleware = require('../middleware/authMiddleware');
 
-/**
- * POST /api/feedback
- * Body: { student_id, faculty_id, text_content }
- * Auth is optional but recommended. We'll allow posting if required fields present.
- */
-router.post('/', authMiddleware, async (req, res) => {
+// POST /api/feedback
+router.post('/', authMiddleware, async (req, res, next) => {
   try {
-    const { student_id, faculty_id, text_content } = req.body;
-    if (!student_id || !faculty_id || !text_content) {
-      return res.status(400).json({ error: 'Missing required fields: student_id, faculty_id, text_content' });
-    }
+    const sender = req.user && (req.user.user_id || req.user.id);
+    const { receiver_user_id, score, comment } = req.body || {};
+    if (!sender) return res.status(401).json({ error: 'Unauthorized' });
+    if (!receiver_user_id || score === undefined || score === null) return res.status(400).json({ error: 'receiver_user_id and score required' });
 
-    // if you have a python sentiment runner service, you could call it here.
-    // For now, keep sentiment nullable to avoid external dependency failures.
-    const sentiment = null;
-
-    const q = `INSERT INTO feedback (student_id, faculty_id, text_content, sentiment) VALUES ($1,$2,$3,$4) RETURNING *`;
-    const r = await pool.query(q, [student_id, faculty_id, text_content, sentiment]);
-    return res.status(201).json(r.rows[0]);
+    const q = `INSERT INTO feedback (sender_user_id, receiver_user_id, score, comment, created_on)
+               VALUES ($1,$2,$3,$4,NOW()) RETURNING *`;
+    const r = await pool.query(q, [sender, receiver_user_id, score, comment || null]);
+    return res.json({ created: r.rows[0] });
   } catch (err) {
-    console.error('Error creating feedback:', err && err.stack ? err.stack : err);
-    return res.status(500).json({ error: 'Server error creating feedback' });
+    console.error('Feedback create error', err && (err.stack || err));
+    return next(err);
   }
 });
 
-/**
- * GET /api/feedback
- * Returns recent feedback with student and faculty names (join).
- */
-router.get('/', async (req, res) => {
+// GET /api/feedback?teacher_id=... or faculty_id=... or receiver_user_id=...
+router.get('/', async (req, res, next) => {
   try {
-    const q = `
-      SELECT f.feedback_id, s.name AS student_name, fa.name AS faculty_name, 
-             f.text_content, f.sentiment, f.submitted_on
-      FROM feedback f
-      LEFT JOIN students s ON f.student_id = s.student_id
-      LEFT JOIN faculty fa ON f.faculty_id = fa.faculty_id
-      ORDER BY f.submitted_on DESC
-      LIMIT 500
-    `;
-    const r = await pool.query(q);
-    return res.json(r.rows);
+    const teacherId = req.query.teacher_id || req.query.faculty_id || req.query.receiver_user_id;
+    if (!teacherId) return res.status(400).json({ error: 'teacher_id (or faculty_id) required' });
+
+    const q = `SELECT f.id, f.sender_user_id, f.receiver_user_id, f.score, f.comment, f.created_on,
+                      u.display_name as sender_name, u.email as sender_email
+               FROM feedback f
+               LEFT JOIN users u ON u.user_id = f.sender_user_id
+               WHERE f.receiver_user_id = $1
+               ORDER BY f.created_on DESC
+               LIMIT 500`;
+    const r = await pool.query(q, [teacherId]);
+    return res.json({ feedback: r.rows || [] });
   } catch (err) {
-    console.error('Error reading feedback:', err && err.stack ? err.stack : err);
-    return res.status(500).json({ error: 'Database error while fetching feedback.' });
+    console.error('Feedback list error', err && (err.stack || err));
+    return next(err);
+  }
+});
+
+// GET /api/feedback/summary?teacher_id=...
+router.get('/summary', async (req, res, next) => {
+  try {
+    const teacherId = req.query.teacher_id || req.query.faculty_id || req.query.receiver_user_id;
+    if (!teacherId) return res.status(400).json({ error: 'teacher_id required' });
+
+    const q = `SELECT COALESCE(AVG(score)::numeric, 0) as avg_rating, COUNT(*)::int as count
+               FROM feedback
+               WHERE receiver_user_id = $1`;
+    const r = await pool.query(q, [teacherId]);
+    const row = r.rows[0] || { avg_rating: 0, count: 0 };
+    return res.json({ avg: Number(row.avg_rating) || 0, count: Number(row.count) || 0 });
+  } catch (err) {
+    console.error('Feedback summary error', err && (err.stack || err));
+    return next(err);
   }
 });
 
