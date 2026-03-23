@@ -1,17 +1,50 @@
-/node_modules
+# Dependencies
+node_modules/
 /client/node_modules
 /server/node_modules
+
+# Build files
 /client/dist
+/client/build
+/server/dist
 
 # Environment Variables (CRITICAL: Must not be public)
+.env
 /server/.env
+.env.local
+.env.production
 
 # Logs
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-.log
+*.log
 
 # OS generated files
 .DS_Store
-.vscode
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+/sentiment_module/__pycache__/
+venv/
+
+# Database
+*.sql
+database_backup/
+
+# Uploaded files
+/server/uploads/*
+!/server/uploads/.gitkeep
+
+# Sensitive files
+config.js
+db.js

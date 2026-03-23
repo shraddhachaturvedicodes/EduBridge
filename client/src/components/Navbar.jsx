@@ -1,71 +1,136 @@
-// client/src/components/Navbar.jsx
-import React from "react";
-import { Link, useNavigate } from "react-router-dom";
-import { useAuth } from "../context/AuthContext";
-import { clearToken } from "../utils/auth"; // adjust path if needed
+import React from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 
 export default function Navbar() {
-  const { user, setUser } = useAuth() || {};
   const navigate = useNavigate();
+  const { user, logout } = useAuth();
 
-  const logout = () => {
-    // clear local token/session and update auth context
-    try {
-      clearToken();
-    } catch (e) { /* ignore if not present */ }
-    if (setUser) setUser(null);
-    navigate("/login");
+  const handleLogout = () => {
+    logout();
+    navigate('/login');
   };
 
+  // Don't show navbar on public pages
+  if (!user) return null;
+
   return (
-    <header style={styles.header}>
-      <div style={styles.brand}>
-        <Link to="/" style={styles.brandLink}>EduBridge</Link>
+    <nav style={{
+      background: '#ffffff',
+      borderBottom: '1px solid #e2e8f0',
+      padding: '16px 32px',
+      display: 'flex',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      position: 'sticky',
+      top: 0,
+      zIndex: 100,
+      boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
+    }}>
+      {/* Logo */}
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 12
+      }}>
+        <div style={{
+          width: 40,
+          height: 40,
+          background: 'linear-gradient(135deg, #2dd4bf 0%, #0d9488 100%)',
+          borderRadius: 10,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          fontSize: 20
+        }}>
+          🎓
+        </div>
+        <span style={{
+          fontSize: 24,
+          fontWeight: 700,
+          color: '#0f2a3d',
+          letterSpacing: '-0.5px'
+        }}>
+          EduBridge
+        </span>
       </div>
 
-      <nav style={styles.nav}>
-        <Link to="/dashboard" style={styles.link}>Dashboard</Link>
-        <Link to="/courses" style={styles.link}>Courses</Link>
-        <Link to="/timetable" style={styles.link}>Timetable</Link>
-        <Link to="/analytics" style={styles.link}>Analytics</Link>
-        <Link to="/messages" style={styles.link}>Messages</Link>
-        {!user ? (
-          <Link to="/login" style={styles.link}>Login</Link>
-        ) : (
-          <>
-            <span style={styles.user}> {user.display_name || user.email} </span>
-            <button onClick={logout} style={styles.logoutBtn}>Logout</button>
-          </>
-        )}
-      </nav>
-    </header>
+      {/* Right Section - User Info & Logout */}
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 20
+      }}>
+        {/* User Info */}
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 12,
+          padding: '8px 16px',
+          background: '#f8fafc',
+          borderRadius: 10
+        }}>
+          <div style={{
+            width: 36,
+            height: 36,
+            borderRadius: '50%',
+            background: 'linear-gradient(135deg, #2dd4bf 0%, #0d9488 100%)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: '#fff',
+            fontWeight: 700,
+            fontSize: 14
+          }}>
+            {user?.display_name?.charAt(0)?.toUpperCase() || user?.email?.charAt(0)?.toUpperCase() || 'U'}
+          </div>
+          <div>
+            <div style={{
+              fontSize: 14,
+              fontWeight: 600,
+              color: '#0f2a3d'
+            }}>
+              {user?.display_name || 'User'}
+            </div>
+            <div style={{
+              fontSize: 12,
+              color: '#64748b',
+              textTransform: 'capitalize'
+            }}>
+              {user?.role || 'Student'}
+            </div>
+          </div>
+        </div>
+
+        {/* Logout Button */}
+        <button
+          onClick={handleLogout}
+          style={{
+            padding: '10px 24px',
+            background: '#ef4444',
+            color: '#fff',
+            border: 'none',
+            borderRadius: 8,
+            fontSize: 14,
+            fontWeight: 600,
+            cursor: 'pointer',
+            transition: 'all 0.3s',
+            boxShadow: '0 2px 8px rgba(239, 68, 68, 0.2)'
+          }}
+          onMouseOver={(e) => {
+            e.target.style.background = '#dc2626';
+            e.target.style.transform = 'translateY(-2px)';
+            e.target.style.boxShadow = '0 4px 12px rgba(239, 68, 68, 0.3)';
+          }}
+          onMouseOut={(e) => {
+            e.target.style.background = '#ef4444';
+            e.target.style.transform = 'translateY(0)';
+            e.target.style.boxShadow = '0 2px 8px rgba(239, 68, 68, 0.2)';
+          }}
+        >
+          Logout
+        </button>
+      </div>
+    </nav>
   );
 }
-
-const styles = {
-  header: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-    padding: "10px 18px",
-    borderBottom: "1px solid #eee",
-    background: "#fff",
-    position: "sticky",
-    top: 0,
-    zIndex: 50,
-  },
-  brand: { fontWeight: "700", fontSize: 18 },
-  brandLink: { color: "#111", textDecoration: "none" },
-  nav: { display: "flex", gap: 14, alignItems: "center" },
-  link: { color: "#4a2", textDecoration: "underline", fontSize: 15 },
-  user: { marginLeft: 8, fontSize: 14, color: "#333" },
-  logoutBtn: {
-    marginLeft: 8,
-    background: "#ef5350",
-    color: "#fff",
-    border: "none",
-    padding: "6px 10px",
-    borderRadius: 6,
-    cursor: "pointer",
-  },
-};

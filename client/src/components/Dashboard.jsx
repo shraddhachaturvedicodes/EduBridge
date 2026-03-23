@@ -1,153 +1,425 @@
-// src/components/Dashboard.jsx
-import React from 'react';
-import { Link } from 'react-router-dom';
-
-/* inline icons (same as before) */
-const IconPeople = ({ className = "w-5 h-5", color = "currentColor" }) => (
-  <svg className={className} viewBox="0 0 24 24" fill="none"><path d="M16 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6z" stroke={color} strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round"/><path d="M6 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6z" stroke={color} strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round"/><path d="M2 20c0-2.2 3.6-4 8-4s8 1.8 8 4" stroke={color} strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round"/></svg>
-);
-const IconCourse = ({ className = "w-5 h-5", color = "currentColor" }) => (
-  <svg className={className} viewBox="0 0 24 24" fill="none"><path d="M12 2L2 7l10 5 10-5-10-5z" stroke={color} strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/><path d="M2 17l10 5 10-5" stroke={color} strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/><path d="M2 12l10 5 10-5" stroke={color} strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
-);
-const IconFeedback = ({ className = "w-5 h-5", color = "currentColor" }) => (
-  <svg className={className} viewBox="0 0 24 24" fill="none"><path d="M21 15a2 2 0 01-2 2H8l-5 3V5a2 2 0 012-2h14a2 2 0 012 2v10z" stroke={color} strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
-);
-
-function LineChart({ data = [], labels = [], color = "#06b6d4", height = 200 }) {
-  if (!data || !data.length) return null;
-  const width = 640;
-  const padding = 28;
-  const max = Math.max(...data) * 1.05;
-  const min = Math.min(...data) * 0.95;
-  const range = max - min || 1;
-
-  const points = data.map((d, i) => {
-    const x = padding + (i * (width - padding * 2) / Math.max(data.length - 1, 1));
-    const y = padding + ((max - d) / range) * (height - padding * 2);
-    return [x, y];
-  });
-
-  const path = points.map((p, i) => `${i === 0 ? "M" : "L"} ${p[0]} ${p[1]}`).join(" ");
-  const area = `${path} L ${points[points.length - 1][0]} ${height - padding} L ${points[0][0]} ${height - padding} Z`;
-
-  return (
-    <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-auto">
-      <rect x="0" y="0" width={width} height={height} fill="transparent" />
-      {[0.25, 0.5, 0.75].map((t, idx) => (
-        <line key={idx} x1={padding} x2={width - padding} y1={padding + t * (height - padding * 2)} y2={padding + t * (height - padding * 2)} stroke="#eef2f7" strokeWidth="1" />
-      ))}
-
-      <path d={area} fill={color} opacity="0.10" />
-      <path d={path} fill="none" stroke={color} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
-
-      {points.map((p, i) => (
-        <g key={i}>
-          <circle cx={p[0]} cy={p[1]} r="4.5" fill={color} stroke="#fff" strokeWidth="1.2" />
-        </g>
-      ))}
-
-      {labels.map((lab, i) => {
-        const x = padding + (i * (width - padding * 2) / Math.max(labels.length - 1, 1));
-        return <text key={i} x={x} y={height - 8} fontSize="11" textAnchor="middle" fill="#6b7280">{lab}</text>;
-      })}
-    </svg>
-  );
-}
+import React, { useState, useEffect } from 'react';
+import { useAuth } from '../context/AuthContext';
+import axios from '../axiosInstance';
 
 export default function Dashboard() {
-  const stats = { faculty: 25, students: 120, courses: 8, avgFeedback: 4.2 };
-  const years = ["2019","2020","2021","2022"];
-  const enrollment = [45, 70, 110, 150];
-  const ranking = [85, 78, 74, 66];
+  const { user } = useAuth();
+  const [stats, setStats] = useState({
+    faculty: 0,
+    students: 0,
+    courses: 0,
+    avgRating: 0
+  });
+  const [notices, setNotices] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-  const tasks = [
-    { name: "Course Planning", pct: 79, color: "linear-gradient(90deg,#06b6d4,#3b82f6)" },
-    { name: "Assignments Review", pct: 50, color: "linear-gradient(90deg,#7c3aed,#06b6d4)" },
-    { name: "Rankings Update", pct: 30, color: "linear-gradient(90deg,#8b5cf6,#7c3aed)" }
-  ];
+  useEffect(() => {
+    fetchDashboardData();
+  }, []);
 
-  const recent = [
-    { name: "John Doe", text: "Great course material!", ago: "2 hrs" },
-    { name: "Jane Smith", text: "Very helpful lectures.", ago: "5 hrs" },
-    { name: "Alice Johnson", text: "Enjoyed the class!", ago: "1 day" }
-  ];
+  const fetchDashboardData = async () => {
+    try {
+      // Set default stats for now
+      setStats({
+        faculty: 45,
+        students: 450,
+        courses: 85,
+        avgRating: 4.2
+      });
+      
+      // Try to fetch notices
+      try {
+        const noticesResponse = await axios.get('/api/notices');
+        setNotices(noticesResponse.data.slice(0, 5) || []);
+      } catch (err) {
+        console.log('Could not fetch notices');
+      }
+      
+      setLoading(false);
+    } catch (error) {
+      console.error('Error fetching dashboard data:', error);
+      setLoading(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div style={{
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        minHeight: '60vh'
+      }}>
+        <div style={{ fontSize: 18, color: '#64748b' }}>Loading...</div>
+      </div>
+    );
+  }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-      {/* Header / title area kept by page wrapper */}
-      <div className="stat-row">
-        <Link to="/faculty" style={{ textDecoration: 'none' }}>
-          <div className="stat-card">
-            <div className="stat-tile" style={{ background: "linear-gradient(135deg,#06b6d4,#3b82f6)" }}><IconPeople color="#fff" /></div>
-            <div className="stat-info">
-              <div className="stat-title">Faculty</div>
-              <div className="stat-value">{stats.faculty}</div>
-            </div>
-          </div>
-        </Link>
-
-        <Link to="/students" style={{ textDecoration: 'none' }}>
-          <div className="stat-card">
-            <div className="stat-tile" style={{ background: "linear-gradient(135deg,#7c3aed,#06b6d4)" }}><IconCourse color="#fff" /></div>
-            <div className="stat-info">
-              <div className="stat-title">Students</div>
-              <div className="stat-value">{stats.students}</div>
-            </div>
-          </div>
-        </Link>
-
-        <Link to="/feedback" style={{ textDecoration: 'none' }}>
-          <div className="stat-card">
-            <div className="stat-tile" style={{ background: "linear-gradient(135deg,#fd6b6b,#f97316)" }}><IconFeedback color="#fff" /></div>
-            <div className="stat-info">
-              <div className="stat-title">Avg. Feedback</div>
-              <div className="stat-value">{stats.avgFeedback}</div>
-            </div>
-          </div>
-        </Link>
-
-        <Link to="/analytics" style={{ textDecoration: 'none' }}>
-          <div className="stat-card">
-            <div className="stat-tile" style={{ background: "linear-gradient(135deg,#34d399,#10b981)" }}>
-              <svg style={{width:22,height:22}} viewBox="0 0 24 24" fill="none"><path d="M3 12h18" stroke="#fff" strokeWidth="1.6" /></svg>
-            </div>
-            <div className="stat-info">
-              <div className="stat-title">Courses</div>
-              <div className="stat-value">{stats.courses}</div>
-            </div>
-          </div>
-        </Link>
+    <div style={{
+      padding: '32px',
+      background: '#f8fafc',
+      minHeight: 'calc(100vh - 73px)'
+    }}>
+      {/* Welcome Section */}
+      <div style={{ marginBottom: 32 }}>
+        <h1 style={{
+          fontSize: 32,
+          fontWeight: 700,
+          color: '#0f2a3d',
+          marginBottom: 8
+        }}>
+          Welcome back, {user?.display_name || 'User'}! 👋
+        </h1>
+        <p style={{
+          fontSize: 16,
+          color: '#64748b'
+        }}>
+          Here's what's happening with your academic portal today.
+        </p>
       </div>
 
-      {/* charts/content as before */}
-      <div className="content-grid">
-        <div>
-          <div className="card">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-              <div style={{ fontWeight: 700 }}>Student Enrollment Trends</div>
-              <div style={{ color: '#6b7280' }}>Last 4 years</div>
+      {/* Statistics Cards */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+        gap: 24,
+        marginBottom: 32
+      }}>
+        {/* Faculty Card */}
+        <div style={{
+          background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+          borderRadius: 16,
+          padding: 24,
+          color: '#fff',
+          boxShadow: '0 10px 30px rgba(102, 126, 234, 0.3)',
+          transition: 'transform 0.3s',
+          cursor: 'pointer'
+        }}
+        onMouseOver={(e) => e.currentTarget.style.transform = 'translateY(-8px)'}
+        onMouseOut={(e) => e.currentTarget.style.transform = 'translateY(0)'}
+        >
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 12,
+            marginBottom: 16
+          }}>
+            <div style={{
+              width: 48,
+              height: 48,
+              background: 'rgba(255,255,255,0.2)',
+              borderRadius: 12,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: 24
+            }}>
+              👨‍🏫
             </div>
-            <LineChart data={enrollment} labels={years} color="#06b6d4" height={220} />
-          </div>
-
-          <div className="card" style={{ marginTop: 18 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-              <div style={{ fontWeight: 700 }}>NIRF / Ranking Trend</div>
-              <div style={{ color: '#6b7280' }}>Last 4 years</div>
+            <div style={{ fontSize: 14, opacity: 0.9, fontWeight: 500 }}>
+              Faculty
             </div>
-            <LineChart data={ranking} labels={years} color="#7c3aed" height={160} />
           </div>
+          <div style={{ fontSize: 40, fontWeight: 700, marginBottom: 4 }}>
+            {stats.faculty}
+          </div>
+          <div style={{ fontSize: 13, opacity: 0.8 }}>
+            Total Faculty Members
+          </div>
+        </div>
 
-          <div className="card" style={{ marginTop: 18 }}>
-            <div style={{ fontWeight: 700, marginBottom: 8 }}>Operational Tasks</div>
-            <div style={{ display: 'grid', gap: 12 }}>
-              {tasks.map((t, i) => (
-                <div key={i}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', color: '#6b7280', marginBottom: 6 }}>
-                    <div>{t.name}</div><div>{t.pct}%</div>
+        {/* Students Card */}
+        <div style={{
+          background: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
+          borderRadius: 16,
+          padding: 24,
+          color: '#fff',
+          boxShadow: '0 10px 30px rgba(240, 147, 251, 0.3)',
+          transition: 'transform 0.3s',
+          cursor: 'pointer'
+        }}
+        onMouseOver={(e) => e.currentTarget.style.transform = 'translateY(-8px)'}
+        onMouseOut={(e) => e.currentTarget.style.transform = 'translateY(0)'}
+        >
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 12,
+            marginBottom: 16
+          }}>
+            <div style={{
+              width: 48,
+              height: 48,
+              background: 'rgba(255,255,255,0.2)',
+              borderRadius: 12,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: 24
+            }}>
+              🎓
+            </div>
+            <div style={{ fontSize: 14, opacity: 0.9, fontWeight: 500 }}>
+              Students
+            </div>
+          </div>
+          <div style={{ fontSize: 40, fontWeight: 700, marginBottom: 4 }}>
+            {stats.students}
+          </div>
+          <div style={{ fontSize: 13, opacity: 0.8 }}>
+            Enrolled Students
+          </div>
+        </div>
+
+        {/* Courses Card */}
+        <div style={{
+          background: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)',
+          borderRadius: 16,
+          padding: 24,
+          color: '#fff',
+          boxShadow: '0 10px 30px rgba(79, 172, 254, 0.3)',
+          transition: 'transform 0.3s',
+          cursor: 'pointer'
+        }}
+        onMouseOver={(e) => e.currentTarget.style.transform = 'translateY(-8px)'}
+        onMouseOut={(e) => e.currentTarget.style.transform = 'translateY(0)'}
+        >
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 12,
+            marginBottom: 16
+          }}>
+            <div style={{
+              width: 48,
+              height: 48,
+              background: 'rgba(255,255,255,0.2)',
+              borderRadius: 12,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: 24
+            }}>
+              📚
+            </div>
+            <div style={{ fontSize: 14, opacity: 0.9, fontWeight: 500 }}>
+              Courses
+            </div>
+          </div>
+          <div style={{ fontSize: 40, fontWeight: 700, marginBottom: 4 }}>
+            {stats.courses}
+          </div>
+          <div style={{ fontSize: 13, opacity: 0.8 }}>
+            Active Courses
+          </div>
+        </div>
+
+        {/* Average Rating Card */}
+        <div style={{
+          background: 'linear-gradient(135deg, #fa709a 0%, #fee140 100%)',
+          borderRadius: 16,
+          padding: 24,
+          color: '#fff',
+          boxShadow: '0 10px 30px rgba(250, 112, 154, 0.3)',
+          transition: 'transform 0.3s',
+          cursor: 'pointer'
+        }}
+        onMouseOver={(e) => e.currentTarget.style.transform = 'translateY(-8px)'}
+        onMouseOut={(e) => e.currentTarget.style.transform = 'translateY(0)'}
+        >
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 12,
+            marginBottom: 16
+          }}>
+            <div style={{
+              width: 48,
+              height: 48,
+              background: 'rgba(255,255,255,0.2)',
+              borderRadius: 12,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: 24
+            }}>
+              ⭐
+            </div>
+            <div style={{ fontSize: 14, opacity: 0.9, fontWeight: 500 }}>
+              Avg Rating
+            </div>
+          </div>
+          <div style={{ fontSize: 40, fontWeight: 700, marginBottom: 4 }}>
+            {stats.avgRating}/5.0
+          </div>
+          <div style={{ fontSize: 13, opacity: 0.8 }}>
+            Faculty Average Rating
+          </div>
+        </div>
+      </div>
+
+      {/* Main Content Grid */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: '2fr 1fr',
+        gap: 24
+      }}>
+        {/* Left Column - Charts */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+          {/* Enrollment Trends Chart */}
+          <div style={{
+            background: '#fff',
+            borderRadius: 16,
+            padding: 28,
+            boxShadow: '0 4px 20px rgba(15, 42, 61, 0.08)'
+          }}>
+            <h3 style={{
+              fontSize: 20,
+              fontWeight: 700,
+              color: '#0f2a3d',
+              marginBottom: 24
+            }}>
+              Student Enrollment Trends
+            </h3>
+            
+            {/* Simple Bar Chart */}
+            <div style={{
+              position: 'relative',
+              height: 250,
+              background: 'linear-gradient(to top, #e0f2fe 0%, transparent 100%)',
+              borderRadius: 12,
+              padding: 20,
+              display: 'flex',
+              alignItems: 'flex-end',
+              justifyContent: 'space-around'
+            }}>
+              {[420, 435, 445, 450].map((value, index) => (
+                <div key={index} style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  gap: 8
+                }}>
+                  <div style={{
+                    height: `${(value / 450) * 180}px`,
+                    width: 60,
+                    background: 'linear-gradient(to top, #0ea5e9, #38bdf8)',
+                    borderRadius: '8px 8px 0 0',
+                    transition: 'all 0.3s',
+                    cursor: 'pointer',
+                    position: 'relative'
+                  }}
+                  onMouseOver={(e) => {
+                    e.currentTarget.style.transform = 'scaleY(1.05)';
+                    e.currentTarget.style.background = 'linear-gradient(to top, #0284c7, #0ea5e9)';
+                  }}
+                  onMouseOut={(e) => {
+                    e.currentTarget.style.transform = 'scaleY(1)';
+                    e.currentTarget.style.background = 'linear-gradient(to top, #0ea5e9, #38bdf8)';
+                  }}
+                  >
+                    <div style={{
+                      position: 'absolute',
+                      top: -25,
+                      left: '50%',
+                      transform: 'translateX(-50%)',
+                      fontSize: 12,
+                      fontWeight: 700,
+                      color: '#0f2a3d'
+                    }}>
+                      {value}
+                    </div>
                   </div>
-                  <div className="progress-track">
-                    <div className="progress-fill" style={{ width: `${t.pct}%`, background: t.color }} />
+                  <div style={{
+                    fontSize: 13,
+                    color: '#64748b',
+                    fontWeight: 600
+                  }}>
+                    {2019 + index}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div style={{
+              marginTop: 16,
+              padding: 12,
+              background: '#f0f9ff',
+              borderRadius: 8,
+              fontSize: 13,
+              color: '#0369a1',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8
+            }}>
+              <span style={{ fontSize: 16 }}>📈</span>
+              <span>Steady growth of <strong>7.1%</strong> over the last 4 years</span>
+            </div>
+          </div>
+
+          {/* Task Progress */}
+          <div style={{
+            background: '#fff',
+            borderRadius: 16,
+            padding: 28,
+            boxShadow: '0 4px 20px rgba(15, 42, 61, 0.08)'
+          }}>
+            <h3 style={{
+              fontSize: 20,
+              fontWeight: 700,
+              color: '#0f2a3d',
+              marginBottom: 24
+            }}>
+              Task Progress
+            </h3>
+
+            <div style={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 20
+            }}>
+              {[
+                { name: 'Course Planning', progress: 95, color: '#10b981' },
+                { name: 'Assignments Review', progress: 70, color: '#3b82f6' },
+                { name: 'Grade Submission', progress: 45, color: '#f59e0b' },
+                { name: 'Feedback Collection', progress: 85, color: '#8b5cf6' }
+              ].map((task, index) => (
+                <div key={index}>
+                  <div style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    marginBottom: 8
+                  }}>
+                    <span style={{
+                      fontSize: 14,
+                      fontWeight: 600,
+                      color: '#0f2a3d'
+                    }}>
+                      {task.name}
+                    </span>
+                    <span style={{
+                      fontSize: 14,
+                      fontWeight: 700,
+                      color: task.color
+                    }}>
+                      {task.progress}%
+                    </span>
+                  </div>
+                  <div style={{
+                    width: '100%',
+                    height: 8,
+                    background: '#f1f5f9',
+                    borderRadius: 999,
+                    overflow: 'hidden'
+                  }}>
+                    <div style={{
+                      width: `${task.progress}%`,
+                      height: '100%',
+                      background: task.color,
+                      borderRadius: 999,
+                      transition: 'width 1s ease'
+                    }} />
                   </div>
                 </div>
               ))}
@@ -155,34 +427,98 @@ export default function Dashboard() {
           </div>
         </div>
 
-        <aside style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-          <div className="card">
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-              <div style={{ fontWeight: 700 }}>Recent Feedback</div>
-              <div style={{ color: '#6b7280' }}>Auto-updated</div>
-            </div>
-            <div className="recent-list">
-              {recent.map((r, i) => (
-                <div key={i} className="recent-item">
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div style={{ fontWeight: 600 }}>{r.name}</div>
-                    <div style={{ color: '#6b7280', fontSize: 12 }}>{r.ago}</div>
-                  </div>
-                  <div style={{ marginTop: 6, color: '#374151' }}>{r.text}</div>
-                </div>
-              ))}
-            </div>
-          </div>
+        {/* Right Column - Notices */}
+        <div style={{
+          background: '#fff',
+          borderRadius: 16,
+          padding: 28,
+          boxShadow: '0 4px 20px rgba(15, 42, 61, 0.08)',
+          height: 'fit-content'
+        }}>
+          <h3 style={{
+            fontSize: 20,
+            fontWeight: 700,
+            color: '#0f2a3d',
+            marginBottom: 20
+          }}>
+            Recent Notices 📢
+          </h3>
 
-          <div className="card">
-            <div style={{ fontWeight: 700, marginBottom: 8 }}>Quick Recommendations</div>
-            <ul style={{ margin: 0, paddingLeft: 16 }}>
-              <li style={{ marginBottom: 6 }}>Focus on research grants for higher ranking</li>
-              <li style={{ marginBottom: 6 }}>Skill workshops for practical labs</li>
-              <li style={{ marginBottom: 6 }}>Automate feedback reminders</li>
-            </ul>
+          <div style={{
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 16
+          }}>
+            {notices.length > 0 ? notices.map((notice, index) => (
+              <div
+                key={notice.notice_id || index}
+                style={{
+                  padding: 16,
+                  background: '#f8fafc',
+                  borderRadius: 12,
+                  borderLeft: '4px solid #2dd4bf',
+                  transition: 'all 0.3s',
+                  cursor: 'pointer'
+                }}
+                onMouseOver={(e) => {
+                  e.currentTarget.style.background = '#f1f5f9';
+                  e.currentTarget.style.transform = 'translateX(4px)';
+                }}
+                onMouseOut={(e) => {
+                  e.currentTarget.style.background = '#f8fafc';
+                  e.currentTarget.style.transform = 'translateX(0)';
+                }}
+              >
+                <div style={{
+                  fontSize: 14,
+                  fontWeight: 600,
+                  color: '#0f2a3d',
+                  marginBottom: 6
+                }}>
+                  {notice.title}
+                </div>
+                <div style={{
+                  fontSize: 13,
+                  color: '#64748b',
+                  marginBottom: 8,
+                  lineHeight: 1.5
+                }}>
+                  {notice.content?.substring(0, 100)}
+                  {notice.content?.length > 100 ? '...' : ''}
+                </div>
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 12,
+                  fontSize: 12,
+                  color: '#94a3b8'
+                }}>
+                  <span style={{
+                    padding: '2px 8px',
+                    background: '#dbeafe',
+                    color: '#1e40af',
+                    borderRadius: 4,
+                    fontWeight: 600
+                  }}>
+                    {notice.target_role}
+                  </span>
+                  <span>
+                    {new Date(notice.posted_on).toLocaleDateString()}
+                  </span>
+                </div>
+              </div>
+            )) : (
+              <div style={{
+                padding: 40,
+                textAlign: 'center',
+                color: '#94a3b8'
+              }}>
+                <div style={{ fontSize: 48, marginBottom: 12 }}>📭</div>
+                <div style={{ fontSize: 14 }}>No notices yet</div>
+              </div>
+            )}
           </div>
-        </aside>
+        </div>
       </div>
     </div>
   );
