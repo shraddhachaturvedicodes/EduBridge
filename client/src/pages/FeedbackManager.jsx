@@ -20,19 +20,6 @@ function normalizeList(resp) {
   return [];
 }
 
-async function fetchFeedbackOnly() {
-  try {
-    const resp = await api.get('/feedback', { params: {} });
-    const list = Array.isArray(resp.data?.feedback) ? resp.data.feedback : (Array.isArray(resp.data) ? resp.data : []);
-    setFeedbackList(list);
-    return true;
-  } catch (err) {
-    console.warn('[FeedbackManager] /feedback failed', err?.response?.status, err?.response?.data || err?.message);
-    // if backend needs teacher_id, do nothing — we'll keep list empty but won't crash
-    return false;
-  }
-}
-
 export default function FeedbackManager() {
   const [students, setStudents] = useState([]);
   const [faculty, setFaculty] = useState([]);
@@ -40,7 +27,8 @@ export default function FeedbackManager() {
   const [newFeedback, setNewFeedback] = useState({
     student_id: '',
     faculty_id: '',
-    text_content: ''
+    text_content: '',
+    score: 5
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -98,44 +86,16 @@ export default function FeedbackManager() {
       setFaculty([]);
     }
 
-    // FEEDBACK — try to retrieve aggregated feedback; backend may require teacher_id
+    // FEEDBACK — fetch all feedback using /feedback/all endpoint for admin/management
     try {
-      // Try 1: try fetching all feedback (management view)
-      try {
-        const fb1 = await api.get('/feedback');
-        setFeedbackList(Array.isArray(fb1.data?.feedback) ? fb1.data.feedback : (Array.isArray(fb1.data) ? fb1.data : []));
-      } catch (err1) {
-        // If 400, backend expects teacher_id; if 500 or other, we try fallback endpoints
-        const status = err1?.response?.status;
-        console.warn('[FeedbackManager] /feedback failed', status, err1?.response?.data || err1.message);
-        if (status === 400) {
-          // backend requires teacher_id — try admin summary or limited fetches
-          try {
-            const fb2 = await api.get('/feedback', { params: { limit: 200 } });
-            setFeedbackList(Array.isArray(fb2.data?.feedback) ? fb2.data.feedback : (Array.isArray(fb2.data) ? fb2.data : []));
-          } catch (err2) {
-            // try admin/fallback endpoints
-            try {
-              const fb3 = await api.get('/admin/feedback');
-              setFeedbackList(normalizeList(fb3));
-            } catch (err3) {
-              console.warn('[FeedbackManager] all feedback endpoints failed', err3?.response?.status, err3?.response?.data);
-              setFeedbackList([]);
-            }
-          }
-        } else {
-          // status 500 or other: try admin/alternate endpoints
-          try {
-            const fbAlt = await api.get('/admin/feedback');
-            setFeedbackList(normalizeList(fbAlt));
-          } catch (errAlt) {
-            console.warn('[FeedbackManager] fallback feedback endpoints failed', errAlt?.response?.data || errAlt.message);
-            setFeedbackList([]);
-          }
-        }
-      }
-    } catch (e) {
-      console.error("Unexpected error while loading feedback", e);
+      const fb = await api.get('/feedback/all');
+      const feedbackData = Array.isArray(fb.data?.feedback) 
+        ? fb.data.feedback 
+        : (Array.isArray(fb.data) ? fb.data : []);
+      setFeedbackList(feedbackData);
+      console.log('[FeedbackManager] Fetched feedback:', feedbackData);
+    } catch (err) {
+      console.warn('[FeedbackManager] /feedback/all failed', err?.response?.status, err?.response?.data || err?.message);
       setFeedbackList([]);
     } finally {
       setLoading(false);
@@ -154,50 +114,36 @@ export default function FeedbackManager() {
   const handleSubmit = async (e) => {
   e.preventDefault();
   setError(null);
-  if (!newFeedback.student_id || !newFeedback.faculty_id || !newFeedback.text_content) {
-    setError('Please select student, faculty and write feedback text.');
+  if (!newFeedback.student_id || !newFeedback.faculty_id || !newFeedback.text_content || !newFeedback.score) {
+    setError('Please select student, faculty, rating and write feedback text.');
     return;
   }
 
   try {
-    // --- PAYLOAD: try two naming shapes because backends differ often ---
-    const payloadVariants = [
-      // variant A — earlier shape we used (sender_user_id etc.)
-      {
-        sender_user_id: newFeedback.student_id,
-        receiver_user_id: newFeedback.faculty_id,
-        comment: newFeedback.text_content,
-        score: newFeedback.score ?? 5
-      },
-      // variant B — some backends expect student_id / faculty_id / text
-      {
-        student_id: newFeedback.student_id,
-        faculty_id: newFeedback.faculty_id,
-        text: newFeedback.text_content
-      }
-    ];
+    // Send correct payload format expected by backend
+    const payload = {
+      receiver_user_id: parseInt(newFeedback.faculty_id),
+      score: parseInt(newFeedback.score),
+      comment: newFeedback.text_content.trim()
+    };
 
-    let posted = false;
-    for (const payload of payloadVariants) {
-      try {
-        const res = await api.post('/feedback', payload);
-        console.info('[FeedbackManager] posted feedback ok', res?.status);
-        posted = true;
-        break;
-      } catch (err) {
-        console.warn('[FeedbackManager] POST /feedback failed for payload shape', err?.response?.status, err?.response?.data || err?.message);
-        // try next payload shape
-      }
+    console.info('[FeedbackManager] Submitting payload:', payload);
+    const res = await api.post('/feedback', payload);
+    console.info('[FeedbackManager] Feedback submitted successfully', res?.status);
+
+    // Refresh feedback list to show newly submitted feedback
+    try {
+      const fb = await api.get('/feedback/all');
+      const feedbackData = Array.isArray(fb.data?.feedback) 
+        ? fb.data.feedback 
+        : (Array.isArray(fb.data) ? fb.data : []);
+      setFeedbackList(feedbackData);
+      console.log('[FeedbackManager] Feedback list refreshed');
+    } catch (refreshErr) {
+      console.warn('[FeedbackManager] Failed to refresh feedback list:', refreshErr?.message);
     }
 
-    if (!posted) {
-      throw new Error('All POST attempts failed; check backend expected payload fields.');
-    }
-
-    // only refresh feedback list (not students)
-    await fetchFeedbackOnly();
-
-    setNewFeedback({ student_id: '', faculty_id: '', text_content: '' });
+    setNewFeedback({ student_id: '', faculty_id: '', text_content: '', score: 5 });
   } catch (err) {
     console.error('Submission error', err);
     setError(err?.response?.data?.error || err?.message || 'Failed to submit feedback');
@@ -261,6 +207,24 @@ export default function FeedbackManager() {
             {faculty.length === 0 && <div className="text-xs text-gray-500 mt-1">No faculty found. Check backend route /api/faculty or /api/users?roles=faculty.</div>}
           </div>
 
+          {/* Rating Selector */}
+          <div className="col-span-1">
+            <label className="block text-sm font-medium text-gray-700 mb-1">Rating (1-5 Stars):</label>
+            <select
+              name="score"
+              value={newFeedback.score}
+              onChange={handleChange}
+              required
+              className="p-2 border border-gray-300 rounded-md w-full"
+            >
+              <option value="5">⭐⭐⭐⭐⭐ (5 - Excellent)</option>
+              <option value="4">⭐⭐⭐⭐ (4 - Very Good)</option>
+              <option value="3">⭐⭐⭐ (3 - Good)</option>
+              <option value="2">⭐⭐ (2 - Fair)</option>
+              <option value="1">⭐ (1 - Poor)</option>
+            </select>
+          </div>
+
           {/* Text Content */}
           <div className="col-span-4">
             <label className="block text-sm font-medium text-gray-700 mb-1">Your Feedback (Required for analysis):</label>
@@ -289,7 +253,10 @@ export default function FeedbackManager() {
             <div key={f.id ?? f.feedback_id} className="p-4 border border-gray-200 rounded-lg">
               <div className="flex justify-between items-center mb-2 border-b pb-2">
                 <div className="text-sm text-gray-600">Submitted by: <span className="font-semibold text-gray-800">{f.sender_name ?? f.student_name ?? f.sender_user_id}</span> to: <span className="font-semibold text-gray-800">{f.receiver_name ?? f.faculty_name ?? f.receiver_user_id}</span></div>
-                <div className={`px-3 py-1 rounded-full text-xs font-bold ${f.sentiment==='Positive' ? 'bg-green-100 text-green-800' : f.sentiment==='Negative' ? 'bg-red-100 text-red-800' : 'bg-yellow-100 text-yellow-800'}`}>{f.sentiment ?? 'Pending'}</div>
+                <div className="flex gap-2">
+                  <div className="text-sm font-bold">Rating: {'⭐'.repeat(f.score ?? 0)}</div>
+                  <div className={`px-3 py-1 rounded-full text-xs font-bold ${f.sentiment==='Positive' ? 'bg-green-100 text-green-800' : f.sentiment==='Negative' ? 'bg-red-100 text-red-800' : 'bg-yellow-100 text-yellow-800'}`}>{f.sentiment ?? 'Pending'}</div>
+                </div>
               </div>
               <p className="text-sm text-gray-700 italic">"{f.comment ?? f.text_content}"</p>
               <p className="text-xs text-gray-400 mt-2 self-end">Submitted on: {new Date(f.created_on ?? f.submitted_on ?? f.date_submitted ?? Date.now()).toLocaleDateString()}</p>

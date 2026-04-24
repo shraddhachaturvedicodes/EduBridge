@@ -1,5 +1,3 @@
-// src/pages/FeedbackManager.jsx
-// Updated to work with your existing backend API responses
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import axios from '../axiosInstance';
@@ -26,32 +24,21 @@ export default function FeedbackManager() {
   const fetchTeachers = async () => {
     try {
       const response = await axios.get('/api/users');
-      // Filter for faculty
       const facultyUsers = (response.data || []).filter(u => u.role === 'faculty' || u.role === 'teacher');
       setTeachers(facultyUsers);
-      
-      // Fallback if no faculty found
-      if (facultyUsers.length === 0) {
-        setTeachers([
-          { user_id: 1, display_name: 'Dr. Smith', email: 'smith@college.edu' },
-          { user_id: 2, display_name: 'Prof. Johnson', email: 'johnson@college.edu' }
-        ]);
-      }
+      console.log('Fetched teachers:', facultyUsers);
     } catch (err) {
       console.error('Error fetching teachers:', err);
-      setTeachers([
-        { user_id: 1, display_name: 'Dr. Smith', email: 'smith@college.edu' },
-        { user_id: 2, display_name: 'Prof. Johnson', email: 'johnson@college.edu' }
-      ]);
+      setTeachers([]);
     }
   };
 
   const fetchReceivedFeedback = async () => {
     try {
       const response = await axios.get(`/api/feedback?teacher_id=${user.user_id}`);
-      // Your backend returns { feedback: [...] }
       const feedbackData = response.data.feedback || response.data || [];
       setReceivedFeedback(feedbackData);
+      console.log('Fetched feedback:', feedbackData);
     } catch (err) {
       console.error('Error fetching received feedback:', err);
       setReceivedFeedback([]);
@@ -60,6 +47,11 @@ export default function FeedbackManager() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    
+    console.log('🔍 Submitting feedback...');
+    console.log('Selected teacher:', selectedTeacher);
+    console.log('Rating:', rating);
+    console.log('Comment:', comment);
     
     if (!selectedTeacher) {
       setError('Please select a faculty member');
@@ -80,11 +72,17 @@ export default function FeedbackManager() {
     setError('');
 
     try {
-      await axios.post('/api/feedback', {
+      const payload = {
         receiver_user_id: parseInt(selectedTeacher),
         score: rating,
         comment: comment.trim()
-      });
+      };
+      
+      console.log('📤 Sending payload:', payload);
+
+      const response = await axios.post('/api/feedback', payload);
+
+      console.log('✅ Response received:', response.data);
 
       setSubmitSuccess(true);
       setSelectedTeacher('');
@@ -94,7 +92,8 @@ export default function FeedbackManager() {
       setTimeout(() => setSubmitSuccess(false), 4000);
       
     } catch (err) {
-      console.error('Submit error:', err);
+      console.error('❌ Submit error:', err);
+      console.error('Error response:', err.response?.data);
       setError(err.response?.data?.error || 'Failed to submit feedback. Please try again.');
     } finally {
       setLoading(false);
@@ -114,6 +113,22 @@ export default function FeedbackManager() {
         ★
       </span>
     ));
+  };
+
+  const getSentimentColor = (sentiment) => {
+    if (!sentiment) return '#64748b';
+    const s = sentiment.toLowerCase();
+    if (s === 'positive') return '#10b981';
+    if (s === 'negative') return '#ef4444';
+    return '#f59e0b';
+  };
+
+  const getSentimentEmoji = (sentiment) => {
+    if (!sentiment) return '😐';
+    const s = sentiment.toLowerCase();
+    if (s === 'positive') return '😊';
+    if (s === 'negative') return '😟';
+    return '😐';
   };
 
   return (
@@ -206,78 +221,42 @@ export default function FeedbackManager() {
           )}
 
           <form onSubmit={handleSubmit}>
-            {/* Student Name & Faculty Selection */}
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: '1fr 1fr',
-              gap: 24,
-              marginBottom: 24
-            }}>
-              {/* Student Name (Read-only) */}
-              <div>
-                <label style={{
-                  display: 'block',
-                  fontSize: 14,
-                  fontWeight: 600,
+            {/* Faculty Selection */}
+            <div style={{ marginBottom: 24 }}>
+              <label style={{
+                display: 'block',
+                fontSize: 14,
+                fontWeight: 600,
+                color: '#0f2a3d',
+                marginBottom: 8
+              }}>
+                Faculty Member <span style={{ color: '#ef4444' }}>*</span>
+              </label>
+              <select
+                value={selectedTeacher}
+                onChange={(e) => {
+                  setSelectedTeacher(e.target.value);
+                  console.log('Selected teacher:', e.target.value);
+                }}
+                required
+                style={{
+                  width: '100%',
+                  padding: '14px 16px',
+                  borderRadius: 10,
+                  border: '2px solid #e2e8f0',
+                  fontSize: 15,
+                  background: '#fff',
                   color: '#0f2a3d',
-                  marginBottom: 8
-                }}>
-                  Your Name (Student)
-                </label>
-                <input
-                  type="text"
-                  value={user?.display_name || 'Student'}
-                  disabled
-                  style={{
-                    width: '100%',
-                    padding: '14px 16px',
-                    borderRadius: 10,
-                    border: '2px solid #e2e8f0',
-                    fontSize: 15,
-                    background: '#f8fafc',
-                    color: '#64748b',
-                    cursor: 'not-allowed'
-                  }}
-                />
-              </div>
-
-              {/* Faculty Member Selection */}
-              <div>
-                <label style={{
-                  display: 'block',
-                  fontSize: 14,
-                  fontWeight: 600,
-                  color: '#0f2a3d',
-                  marginBottom: 8
-                }}>
-                  Faculty Member <span style={{ color: '#ef4444' }}>*</span>
-                </label>
-                <select
-                  value={selectedTeacher}
-                  onChange={(e) => setSelectedTeacher(e.target.value)}
-                  required
-                  style={{
-                    width: '100%',
-                    padding: '14px 16px',
-                    borderRadius: 10,
-                    border: '2px solid #e2e8f0',
-                    fontSize: 15,
-                    background: '#fff',
-                    color: '#0f2a3d',
-                    cursor: 'pointer',
-                    transition: 'border 0.3s'
-                  }}
-                  onFocus={(e) => e.target.style.borderColor = '#2dd4bf'}
-                  onBlur={(e) => e.target.style.borderColor = '#e2e8f0'}
-                >
-                  <option value="">-- Select Faculty --</option>
-                  {teachers.map((teacher) => (
-                    <option key={teacher.user_id} value={teacher.user_id}>
-                      {teacher.display_name || teacher.email}
-                    </option>
-                  ))}
-                </select>
-              </div>
+                  cursor: 'pointer'
+                }}
+              >
+                <option value="">-- Select Faculty --</option>
+                {teachers.map((teacher) => (
+                  <option key={teacher.user_id} value={teacher.user_id}>
+                    {teacher.display_name || teacher.email}
+                  </option>
+                ))}
+              </select>
             </div>
 
             {/* Star Rating */}
@@ -302,7 +281,10 @@ export default function FeedbackManager() {
                 {[1, 2, 3, 4, 5].map((star) => (
                   <span
                     key={star}
-                    onClick={() => setRating(star)}
+                    onClick={() => {
+                      setRating(star);
+                      console.log('Rating set to:', star);
+                    }}
                     onMouseEnter={() => setHoverRating(star)}
                     onMouseLeave={() => setHoverRating(0)}
                     style={{
@@ -338,11 +320,13 @@ export default function FeedbackManager() {
                 color: '#0f2a3d',
                 marginBottom: 8
               }}>
-                Your Feedback (Required for analysis) <span style={{ color: '#ef4444' }}>*</span>
+                Your Feedback <span style={{ color: '#ef4444' }}>*</span>
               </label>
               <textarea
                 value={comment}
-                onChange={(e) => setComment(e.target.value)}
+                onChange={(e) => {
+                  setComment(e.target.value);
+                }}
                 placeholder="Type your feedback here (e.g., 'The lecturer explained the concepts very clearly')"
                 required
                 maxLength={500}
@@ -355,11 +339,8 @@ export default function FeedbackManager() {
                   fontSize: 15,
                   resize: 'vertical',
                   fontFamily: 'inherit',
-                  transition: 'border 0.3s',
                   lineHeight: 1.6
                 }}
-                onFocus={(e) => e.target.style.borderColor = '#2dd4bf'}
-                onBlur={(e) => e.target.style.borderColor = '#e2e8f0'}
               />
               <div style={{
                 marginTop: 8,
@@ -390,16 +371,6 @@ export default function FeedbackManager() {
                 alignItems: 'center',
                 justifyContent: 'center',
                 gap: 12
-              }}
-              onMouseOver={(e) => {
-                if (!loading) {
-                  e.target.style.transform = 'translateY(-2px)';
-                  e.target.style.boxShadow = '0 6px 20px rgba(45, 212, 191, 0.4)';
-                }
-              }}
-              onMouseOut={(e) => {
-                e.target.style.transform = 'translateY(0)';
-                e.target.style.boxShadow = '0 4px 12px rgba(45, 212, 191, 0.3)';
               }}
             >
               {loading ? (
@@ -469,17 +440,7 @@ export default function FeedbackManager() {
                     padding: 20,
                     background: '#f8fafc',
                     borderRadius: 12,
-                    borderLeft: `4px solid #2dd4bf`,
-                    transition: 'all 0.3s',
-                    cursor: 'pointer'
-                  }}
-                  onMouseOver={(e) => {
-                    e.currentTarget.style.background = '#f1f5f9';
-                    e.currentTarget.style.transform = 'translateX(4px)';
-                  }}
-                  onMouseOut={(e) => {
-                    e.currentTarget.style.background = '#f8fafc';
-                    e.currentTarget.style.transform = 'translateX(0)';
+                    borderLeft: `4px solid ${getSentimentColor(feedback.sentiment)}`
                   }}
                 >
                   <div style={{
@@ -502,13 +463,24 @@ export default function FeedbackManager() {
                         {feedback.score}/5
                       </span>
                     </div>
-                    <div style={{
-                      fontSize: 13,
-                      color: '#64748b',
-                      fontWeight: 600
-                    }}>
-                      {feedback.sender_name || 'Anonymous'}
-                    </div>
+                    {feedback.sentiment && (
+                      <div style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 8,
+                        padding: '4px 12px',
+                        background: getSentimentColor(feedback.sentiment) + '20',
+                        color: getSentimentColor(feedback.sentiment),
+                        borderRadius: 20,
+                        fontSize: 13,
+                        fontWeight: 600
+                      }}>
+                        <span style={{ fontSize: 16 }}>
+                          {getSentimentEmoji(feedback.sentiment)}
+                        </span>
+                        {feedback.sentiment}
+                      </div>
+                    )}
                   </div>
 
                   <p style={{
@@ -521,14 +493,19 @@ export default function FeedbackManager() {
                   </p>
 
                   <div style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
                     fontSize: 13,
                     color: '#94a3b8'
                   }}>
-                    {new Date(feedback.created_on).toLocaleDateString('en-US', {
-                      year: 'numeric',
-                      month: 'long',
-                      day: 'numeric'
-                    })}
+                    <span>{feedback.sender_name || 'Anonymous'}</span>
+                    <span>
+                      {new Date(feedback.created_on).toLocaleDateString('en-US', {
+                        year: 'numeric',
+                        month: 'long',
+                        day: 'numeric'
+                      })}
+                    </span>
                   </div>
                 </div>
               ))}

@@ -1,7 +1,7 @@
 // server/routes/timetableRoutes.js
 const express = require('express');
 const router = express.Router();
-const { pool } = require('../config');
+const { pool } = require('../db');
 
 // Add timetable entry
 router.post('/', async (req, res) => {

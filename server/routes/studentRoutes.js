@@ -1,7 +1,7 @@
 // server/routes/studentRoutes.js
 const express = require('express');
 const router = express.Router();
-const { pool } = require('../config');
+const { pool } = require('../db');
 
 // Create
 router.post('/', async (req, res) => {

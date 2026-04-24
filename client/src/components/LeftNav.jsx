@@ -94,7 +94,6 @@ export default function LeftNav() {
           letterSpacing: '0.5px',
           fontWeight: 600
         }}>
-          
         </div>
       </div>
 
