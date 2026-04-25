@@ -64,7 +64,7 @@ export default function Contact() {
                   color: '#0f2a3d',
                   fontWeight: 600
                 }}>
-                  admin@edubridge.edu
+                  admin@edubridge.com
                 </div>
               </div>
             </div>
@@ -95,7 +95,7 @@ export default function Contact() {
                   color: '#0f2a3d',
                   fontWeight: 600
                 }}>
-                  +1 (555) 123-4567
+                  +91 9628712610
                 </div>
               </div>
             </div>

@@ -16,6 +16,7 @@ const timetableFileRoutes = require('./timetableFileRoutes');
 const rankingsRoutes = require('./rankingsRoutes'); // 🆕 add this line
 const usersRoutes = require('./usersRoutes');
 const adminRoutes = require('./adminRoutes');
+const notificationRoutes = require('./notificationRoutes');
 
 // Mount all route modules
 router.use('/faculty', facultyRoutes);
@@ -31,5 +32,6 @@ router.use('/messages', messageRoutes);
 router.use('/rankings', rankingsRoutes); // 🆕 mount here
 router.use('/users', usersRoutes);
 router.use('/admin', adminRoutes);
+router.use('/notifications', notificationRoutes);
 
 module.exports = router;

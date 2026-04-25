@@ -48,3 +48,18 @@ database_backup/
 # Sensitive files
 config.js
 db.js
+
+# Ignore Salesforce files
+.sfdx/
+
+# OS files
+desktop.ini
+
+# Uploads / user data
+server/server_uploads/
+
+# Temp files
+tmp_*.js
+
+# Zip files
+*.zip

@@ -162,6 +162,7 @@ export default function LandingPage() {
                 {['Faculty', 'Student', 'Management'].map((role) => (
                   <button
                     key={role}
+                    onClick={() => navigate('/login', { state: { role: role.toLowerCase() } })}
                     style={{
                       flex: 1,
                       padding: '12px',
@@ -171,6 +172,14 @@ export default function LandingPage() {
                       borderRadius: 8,
                       fontWeight: 600,
                       cursor: 'pointer'
+                    }}
+                    onMouseOver={(e) => {
+                      e.currentTarget.style.background = '#2dd4bf';
+                      e.currentTarget.style.color = '#fff';
+                    }}
+                    onMouseOut={(e) => {
+                      e.currentTarget.style.background = role === 'Faculty' ? '#2dd4bf' : '#f1f5f9';
+                      e.currentTarget.style.color = role === 'Faculty' ? '#fff' : '#64748b';
                     }}
                   >
                     {role}
@@ -186,7 +195,8 @@ export default function LandingPage() {
                   borderRadius: 8,
                   border: '1px solid #e2e8f0',
                   marginBottom: 16,
-                  fontSize: 15
+                  fontSize: 15,
+                  boxSizing: 'border-box'
                 }}
               />
 
@@ -199,7 +209,8 @@ export default function LandingPage() {
                   borderRadius: 8,
                   border: '1px solid #e2e8f0',
                   marginBottom: 20,
-                  fontSize: 15
+                  fontSize: 15,
+                  boxSizing: 'border-box'
                 }}
               />
 
@@ -227,8 +238,15 @@ export default function LandingPage() {
                 fontSize: 14
               }}>
                 Don't have an account?{' '}
-                <span style={{ color: '#2dd4bf', cursor: 'pointer' }}>
-                  Contact Admin
+                <span
+                  onClick={() => navigate('/signup')}
+                  style={{
+                    color: '#2dd4bf',
+                    cursor: 'pointer',
+                    fontWeight: 600
+                  }}
+                >
+                  Sign Up
                 </span>
               </p>
             </div>

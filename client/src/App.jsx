@@ -12,6 +12,7 @@ const Features = lazy(() => import("./pages/Features"));
 const About = lazy(() => import("./pages/About"));
 const Contact = lazy(() => import("./pages/Contact"));
 const Login = lazy(() => import("./pages/Login"));
+const Signup = lazy(() => import("./pages/Signup"));
 
 // PROTECTED PAGES (Dashboard Pages)
 const Dashboard = lazy(() => import("./pages/Dashboard"));
@@ -58,7 +59,8 @@ export default function App() {
           <Route path="/about" element={<About />} />
           <Route path="/contact" element={<Contact />} />
           <Route path="/login" element={<Login />} />
-
+          <Route path="/signup" element={<Signup />} />
+          
           {/* PROTECTED ROUTES */}
           <Route
             path="/dashboard"

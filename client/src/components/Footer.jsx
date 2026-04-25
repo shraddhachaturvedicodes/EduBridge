@@ -99,8 +99,8 @@ export default function Footer() {
             gap: 10,
             fontSize: 14
           }}>
-            <div>admin@edubridge.edu</div>
-            <div>+1 (555) 123-4567</div>
+            <div>admin@edubridge.com</div>
+            <div>+91 9628712610</div>
           </div>
         </div>
       </div>
