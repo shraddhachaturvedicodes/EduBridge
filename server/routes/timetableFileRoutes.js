@@ -6,70 +6,60 @@ const multer = require('multer');
 
 const router = express.Router();
 
-// auth + role middleware (adjust paths if your project places them elsewhere)
 const authMiddleware = require('../middleware/authMiddleware');
 const { requireRole } = require('../middleware/roleGuard');
-
-// IMPORTANT: your project exports { pool } from server/db.js
 const { pool } = require('../db');
 
 if (!pool) {
-  console.error('[timetableFileRoutes] WARNING: db.pool is not defined. Check server/db.js export.');
+  console.error('[timetableFileRoutes] WARNING: db.pool is not defined.');
 }
 
-// Upload folder (served as /uploads by server/index.js)
 const UPLOAD_BASE = path.join(process.cwd(), 'server_uploads', 'timetables');
 
-// Ensure folder exists
 try {
   if (!fs.existsSync(UPLOAD_BASE)) {
     fs.mkdirSync(UPLOAD_BASE, { recursive: true });
     console.log('[timetableFileRoutes] Created upload directory:', UPLOAD_BASE);
   }
 } catch (e) {
-  console.error('[timetableFileRoutes] Error ensuring upload directory exists:', e && (e.stack || e.message || e));
+  console.error('[timetableFileRoutes] Error ensuring upload directory:', e.message);
 }
 
 const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, UPLOAD_BASE),
-  filename: (req, file, cb) => {
+  destination: function(req, file, cb) { cb(null, UPLOAD_BASE); },
+  filename: function(req, file, cb) {
     const safe = file.originalname.replace(/[^a-zA-Z0-9.\-_]/g, '_');
-    cb(null, `${Date.now()}_${safe}`);
+    cb(null, Date.now() + '_' + safe);
   }
 });
 
 const upload = multer({
-  storage,
-  limits: { fileSize: 20 * 1024 * 1024 } // 20MB
+  storage: storage,
+  limits: { fileSize: 20 * 1024 * 1024 }
 });
 
 // POST /api/timetables/upload
-// Requires authentication and role (faculty/admin/management)
 router.post(
   '/upload',
   authMiddleware,
   requireRole(['faculty', 'admin', 'management']),
   upload.single('file'),
-  async (req, res) => {
+  async function(req, res) {
     try {
       if (!req.file) {
-        return res.status(400).json({ error: 'No file uploaded. Field name must be "file".' });
+        return res.status(400).json({ error: 'No file uploaded.' });
       }
-
-      // Ensure pool is present
       if (!pool || typeof pool.query !== 'function') {
-        console.error('[timetableFileRoutes] DB pool is missing or invalid');
-        return res.status(500).json({ error: 'Database not available on server.' });
+        return res.status(500).json({ error: 'Database not available.' });
       }
 
-      // file metadata
-      const { filename, originalname, mimetype, size } = req.file;
-      // relative URL for client: index.js serves server_uploads at /uploads
-      const url = `/uploads/timetables/${filename}`;
-      // Who uploaded? authMiddleware should set req.user.user_id
-      const uploadedBy = req.user?.user_id ?? null;
-      // If req.user has faculty mapping use that, else null
-      const facultyId = req.user?.faculty_id ?? null;
+      const filename = req.file.filename;
+      const originalname = req.file.originalname;
+      const mimetype = req.file.mimetype;
+      const size = req.file.size;
+      const url = '/uploads/timetables/' + filename;
+      const uploadedBy = req.user ? req.user.user_id : null;
+      const facultyId = req.user ? req.user.faculty_id : null;
 
       const insertSQL = `
         INSERT INTO timetable_files
@@ -78,22 +68,17 @@ router.post(
         RETURNING tf_id, faculty_id, filename, original_name, mime_type, size_bytes, url, uploaded_on
       `;
 
-      const values = [facultyId, filename, originalname, mimetype, size, url, uploadedBy];
-
-      const r = await pool.query(insertSQL, values);
-      const row = r.rows && r.rows[0] ? r.rows[0] : null;
-
-      return res.json({ message: 'Uploaded', file: row });
+      const r = await pool.query(insertSQL, [facultyId, filename, originalname, mimetype, size, url, uploadedBy]);
+      return res.json({ message: 'Uploaded', file: r.rows[0] });
     } catch (err) {
-      // Log full stack so you can paste it here if anything still fails
-      console.error('Upload error:', err && (err.stack || err.message || err));
+      console.error('Upload error:', err.stack);
       return res.status(500).json({ error: 'Server error uploading file' });
     }
   }
 );
 
-// GET /api/timetables  -> list files
-router.get('/', authMiddleware, async (req, res) => {
+// GET /api/timetables
+router.get('/', authMiddleware, async function(req, res) {
   try {
     if (!pool || typeof pool.query !== 'function') {
       return res.status(500).json({ error: 'Database not available' });
@@ -105,9 +90,56 @@ router.get('/', authMiddleware, async (req, res) => {
     );
     res.json({ files: r.rows });
   } catch (err) {
-    console.error('Error listing timetable_files:', err && (err.stack || err.message || err));
+    console.error('Error listing timetable_files:', err.stack);
     res.status(500).json({ error: 'Failed to list timetable files' });
   }
 });
+
+// DELETE /api/timetables/:id
+router.delete(
+  '/:id',
+  authMiddleware,
+  requireRole(['faculty', 'admin', 'management']),
+  async function(req, res) {
+    try {
+      const id = req.params.id;
+
+      if (!pool || typeof pool.query !== 'function') {
+        return res.status(500).json({ error: 'Database not available' });
+      }
+
+      // Get file info first
+      const r = await pool.query(
+        'SELECT filename, url FROM timetable_files WHERE tf_id = $1',
+        [id]
+      );
+
+      if (r.rows.length === 0) {
+        return res.status(404).json({ error: 'File not found' });
+      }
+
+      const fileRow = r.rows[0];
+
+      // Delete from disk
+      const filePath = path.join(UPLOAD_BASE, fileRow.filename);
+      try {
+        if (fs.existsSync(filePath)) {
+          fs.unlinkSync(filePath);
+          console.log('[timetableFileRoutes] Deleted from disk:', filePath);
+        }
+      } catch (fsErr) {
+        console.warn('[timetableFileRoutes] Could not delete from disk:', fsErr.message);
+      }
+
+      // Delete from database
+      await pool.query('DELETE FROM timetable_files WHERE tf_id = $1', [id]);
+
+      return res.json({ message: 'File deleted successfully' });
+    } catch (err) {
+      console.error('Delete error:', err.stack);
+      return res.status(500).json({ error: 'Failed to delete file' });
+    }
+  }
+);
 
 module.exports = router;
