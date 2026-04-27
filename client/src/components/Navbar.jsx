@@ -46,6 +46,7 @@ export default function Navbar() {
   async function fetchNotifications() {
     try {
       const token = getToken();
+      
       if (!token) return;
 
       const res = await fetch('http://localhost:5000/api/notifications', {

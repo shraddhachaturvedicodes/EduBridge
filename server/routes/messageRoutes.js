@@ -1,114 +1,155 @@
-// server/routes/messageRoutes.js
 const express = require('express');
 const router = express.Router();
-const { pool } = require('../db'); // adjust import if your db export is different
+const { pool } = require('../db');
 const authMiddleware = require('../middleware/authMiddleware');
 
 // POST /api/messages
-// body: { receiver_user_id, text_content, [attachment_url] }
-router.post('/', authMiddleware, async (req, res) => {
+router.post('/', authMiddleware, async function(req, res) {
   try {
-    const sender = req.user.user_id;
-    const { receiver_user_id, text_content, attachment_url = null } = req.body;
-    if (!receiver_user_id || !text_content) return res.status(400).json({ error: 'Missing fields' });
+    var sender = req.user.user_id;
+    var receiver_user_id = parseInt(req.body.receiver_user_id, 10);
+    var text_content = typeof req.body.text_content === 'string' ? req.body.text_content.trim() : '';
 
-    // ensure receiver exists
-    const r = await pool.query('SELECT user_id FROM users WHERE user_id=$1', [receiver_user_id]);
-    if (!r.rows.length) return res.status(404).json({ error: 'Receiver user not found' });
+    if (!Number.isInteger(receiver_user_id) || receiver_user_id <= 0 || !text_content) {
+      return res.status(400).json({ error: 'receiver_user_id and text_content are required' });
+    }
 
-    const insert = `INSERT INTO messages (sender_user_id, receiver_user_id, text_content, attachment_url)
-                    VALUES ($1,$2,$3,$4) RETURNING msg_id, sender_user_id, receiver_user_id, text_content, created_on`;
-    const { rows } = await pool.query(insert, [sender, receiver_user_id, text_content, attachment_url]);
-    return res.status(201).json(rows[0]);
+    // Prevent sending message to yourself
+    if (receiver_user_id === sender) {
+      return res.status(400).json({ error: 'Cannot send message to yourself' });
+    }
+
+    // Check receiver exists
+    var r = await pool.query('SELECT user_id FROM users WHERE user_id=$1', [receiver_user_id]);
+    if (!r.rows.length) {
+      return res.status(404).json({ error: 'Receiver not found' });
+    }
+
+    var insert = `
+      INSERT INTO messages (sender_user_id, receiver_user_id, text_content)
+      VALUES ($1, $2, $3)
+      RETURNING msg_id, sender_user_id, receiver_user_id, text_content, created_on
+    `;
+    var result = await pool.query(insert, [sender, receiver_user_id, text_content]);
+    return res.status(201).json(result.rows[0]);
   } catch (err) {
     console.error('Error creating message:', err);
     res.status(500).json({ error: 'Failed to send message' });
   }
 });
 
-// GET /api/messages?peer=<id>  OR  GET /api/messages to list latest for current user
-router.get('/', authMiddleware, async (req, res) => {
+// GET /api/messages/conversations
+// Must be BEFORE GET /api/messages/:id
+router.get('/conversations', authMiddleware, async function(req, res) {
   try {
-    const userId = req.user.user_id;
-    const peer = req.query.peer;
-    if (peer) {
-      // fetch all messages between user and peer ordered asc
-      const sql = `
-        SELECT m.*, su.display_name as sender_name, ru.display_name as receiver_name
-        FROM messages m
-        LEFT JOIN users su ON su.user_id = m.sender_user_id
-        LEFT JOIN users ru ON ru.user_id = m.receiver_user_id
-        WHERE (sender_user_id=$1 AND receiver_user_id=$2)
-           OR (sender_user_id=$2 AND receiver_user_id=$1)
-        ORDER BY created_on ASC
-      `;
-      const { rows } = await pool.query(sql, [userId, parseInt(peer, 10)]);
-      return res.json(rows);
-    } else {
-      // inbox: latest messages for the user (could be limited/paginated)
-      const sql = `
-        SELECT m.*, su.display_name as sender_name, ru.display_name as receiver_name
-        FROM messages m
-        LEFT JOIN users su ON su.user_id = m.sender_user_id
-        LEFT JOIN users ru ON ru.user_id = m.receiver_user_id
-        WHERE sender_user_id = $1 OR receiver_user_id = $1
-        ORDER BY created_on DESC
-        LIMIT 200
-      `;
-      const { rows } = await pool.query(sql, [userId]);
-      return res.json(rows);
-    }
-  } catch (err) {
-    console.error('Error listing messages:', err);
-    res.status(500).json({ error: 'Failed to fetch messages' });
-  }
-});
+    var userId = req.user.user_id;
 
-// GET /api/messages/conversations  -> one row per peer with latest message
-router.get('/conversations', authMiddleware, async (req, res) => {
-  try {
-    const userId = req.user.user_id;
-    const sql = `
-      WITH peers AS (
+    var sql = `
+      WITH ranked AS (
         SELECT
-          CASE WHEN sender_user_id = $1 THEN receiver_user_id ELSE sender_user_id END AS peer_id,
-          MAX(created_on) AS last_time
-        FROM messages
-        WHERE sender_user_id = $1 OR receiver_user_id = $1
-        GROUP BY peer_id
+          m.*,
+          CASE
+            WHEN m.sender_user_id = $1 THEN m.receiver_user_id
+            ELSE m.sender_user_id
+          END AS peer_id,
+          ROW_NUMBER() OVER (
+            PARTITION BY
+              CASE
+                WHEN m.sender_user_id = $1 THEN m.receiver_user_id
+                ELSE m.sender_user_id
+              END
+            ORDER BY m.created_on DESC
+          ) AS rn
+        FROM messages m
+        WHERE (m.sender_user_id = $1 OR m.receiver_user_id = $1)
+          AND m.sender_user_id != m.receiver_user_id
       )
       SELECT
-        p.peer_id,
-        m.msg_id,
-        m.text_content,
-        m.created_on,
+        r.peer_id,
+        r.msg_id,
+        r.text_content,
+        r.created_on,
+        r.sender_user_id,
+        r.receiver_user_id,
         u.display_name AS peer_name,
-        u.email AS peer_email
-      FROM peers p
-      JOIN messages m
-        ON ((m.sender_user_id = $1 AND m.receiver_user_id = p.peer_id)
-            OR (m.sender_user_id = p.peer_id AND m.receiver_user_id = $1))
-        AND m.created_on = p.last_time
-      JOIN users u ON u.user_id = p.peer_id
-      ORDER BY p.last_time DESC;
+        u.email AS peer_email,
+        u.role AS peer_role
+      FROM ranked r
+      JOIN users u ON u.user_id = r.peer_id
+      WHERE r.rn = 1
+      ORDER BY r.created_on DESC
     `;
-    const { rows } = await pool.query(sql, [userId]);
-    res.json({ conversations: rows });
+
+    var result = await pool.query(sql, [userId]);
+    res.json({ conversations: result.rows });
   } catch (err) {
     console.error('Error fetching conversations:', err);
     res.status(500).json({ error: 'Failed to fetch conversations' });
   }
 });
 
-// DELETE /api/messages/:id
-router.delete('/:id', authMiddleware, async (req, res) => {
+// GET /api/messages?peer=<id>
+// Returns ONLY messages between current user and the peer — full privacy
+router.get('/', authMiddleware, async function(req, res) {
   try {
-    const userId = req.user.user_id;
-    const id = parseInt(req.params.id, 10);
-    // Only allow sender or receiver (or admin) to delete
-    const q = `DELETE FROM messages WHERE msg_id=$1 AND (sender_user_id=$2 OR receiver_user_id=$2) RETURNING msg_id`;
-    const { rows } = await pool.query(q, [id, userId]);
-    if (!rows.length) return res.status(404).json({ error: 'Message not found' });
+    var userId = req.user.user_id;
+    var peer = req.query.peer;
+
+    if (!peer) {
+      return res.json([]);
+    }
+
+    var peerId = parseInt(peer, 10);
+    if (!Number.isInteger(peerId) || peerId <= 0) {
+      return res.status(400).json({ error: 'Invalid peer id' });
+    }
+
+    if (peerId === userId) {
+      return res.json([]);
+    }
+
+    // Only return messages between these two specific users
+    var sql = `
+      SELECT
+        m.msg_id,
+        m.sender_user_id,
+        m.receiver_user_id,
+        m.text_content,
+        m.created_on,
+        su.display_name AS sender_name,
+        ru.display_name AS receiver_name
+      FROM messages m
+      LEFT JOIN users su ON su.user_id = m.sender_user_id
+      LEFT JOIN users ru ON ru.user_id = m.receiver_user_id
+      WHERE (m.sender_user_id = $1 AND m.receiver_user_id = $2)
+         OR (m.sender_user_id = $2 AND m.receiver_user_id = $1)
+      ORDER BY m.created_on ASC
+    `;
+
+    var result = await pool.query(sql, [userId, peerId]);
+    return res.json(result.rows);
+  } catch (err) {
+    console.error('Error listing messages:', err);
+    res.status(500).json({ error: 'Failed to fetch messages' });
+  }
+});
+
+// DELETE /api/messages/:id
+router.delete('/:id', authMiddleware, async function(req, res) {
+  try {
+    var userId = req.user.user_id;
+    var id = parseInt(req.params.id, 10);
+
+    var q = `
+      DELETE FROM messages
+      WHERE msg_id = $1
+        AND (sender_user_id = $2 OR receiver_user_id = $2)
+      RETURNING msg_id
+    `;
+    var result = await pool.query(q, [id, userId]);
+    if (!result.rows.length) {
+      return res.status(404).json({ error: 'Message not found' });
+    }
     return res.json({ message: 'Deleted' });
   } catch (err) {
     console.error('Error deleting message:', err);
