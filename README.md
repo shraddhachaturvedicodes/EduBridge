@@ -221,15 +221,6 @@ cd EduBridge
 Create a `.env` file in the **project root** (`EduBridge/.env`):
 
 ```env
-PG_HOST=localhost
-PG_USER=postgres
-PG_PASSWORD=your_postgres_password
-PG_DATABASE=edubridge_db
-PG_PORT=5432
-JWT_SECRET=your_strong_secret_here
-JWT_EXP=8h
-PORT=5000
-PYTHON_BIN=python3
 ```
 
 > ⚠️ Never commit `.env` — it is already listed in `.gitignore`
