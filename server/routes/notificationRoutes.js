@@ -20,20 +20,16 @@ router.get('/', authMiddleware, async (req, res) => {
       noticeRoles = ['ALL', 'MANAGEMENT', 'STUDENTS', 'FACULTY'];
     }
 
-    console.log('Fetching notices for role:', role, '-> noticeRoles:', noticeRoles);
-
-    // 1. Get notices from last 3 days based on role
+    // 1. Notices filtered by role
     const noticeResult = await pool.query(
       `SELECT notice_id as id, title, content, posted_on as created_at
        FROM notices
-       WHERE target_role = ANY($1::text[])
-       AND posted_on >= NOW() - INTERVAL '3 days'
+       WHERE UPPER(target_role) = ANY($1::text[])
+       AND posted_on >= NOW() - INTERVAL '7 days'
        ORDER BY posted_on DESC
        LIMIT 10`,
       [noticeRoles]
     );
-
-    console.log('Notices found:', noticeResult.rows.length);
 
     noticeResult.rows.forEach(n => {
       notifications.push({
@@ -45,20 +41,18 @@ router.get('/', authMiddleware, async (req, res) => {
       });
     });
 
-    // 2. Get messages from last 3 days received by this user
+    // 2. Messages received by this user
     const msgResult = await pool.query(
       `SELECT m.msg_id as id, m.text_content, m.created_on as created_at,
               u.display_name as sender_name
        FROM messages m
        JOIN users u ON u.user_id = m.sender_user_id
        WHERE m.receiver_user_id = $1
-       AND m.created_on >= NOW() - INTERVAL '3 days'
+       AND m.created_on >= NOW() - INTERVAL '7 days'
        ORDER BY m.created_on DESC
        LIMIT 10`,
       [user_id]
     );
-
-    console.log('Messages found:', msgResult.rows.length);
 
     msgResult.rows.forEach(m => {
       notifications.push({
@@ -72,44 +66,68 @@ router.get('/', authMiddleware, async (req, res) => {
       });
     });
 
-    // 3. Management and admin also get feedback from last 3 days
-    if (role === 'admin' || role === 'management') {
+    // 3. Faculty: notified of new feedback but WITHOUT sender identity
+    if (role === 'faculty') {
       try {
         const feedbackResult = await pool.query(
-          `SELECT f.id, f.comment, f.created_on as created_at,
-                  u.display_name as sender_name
+          `SELECT f.id, f.comment, f.score, f.created_on as created_at
            FROM feedback f
-           LEFT JOIN users u ON u.user_id = f.sender_user_id
-           WHERE f.created_on >= NOW() - INTERVAL '3 days'
+           WHERE f.receiver_user_id = $1
+           AND f.created_on >= NOW() - INTERVAL '7 days'
            ORDER BY f.created_on DESC
-           LIMIT 10`
+           LIMIT 10`,
+          [user_id]
         );
-
-        console.log('Feedback found:', feedbackResult.rows.length);
 
         feedbackResult.rows.forEach(f => {
           notifications.push({
             id: `feedback_${f.id}`,
             type: 'feedback',
-            title: '⭐ New Feedback Submitted',
+            // ✅ No sender name — anonymous
+            title: `⭐ New Anonymous Feedback — ${f.score}/5`,
             body: f.comment
               ? f.comment.substring(0, 60) + (f.comment.length > 60 ? '...' : '')
               : 'New feedback received',
             created_at: f.created_at
           });
         });
-      } catch (feedbackErr) {
-        console.warn('Feedback query failed:', feedbackErr.message);
+      } catch (err) {
+        console.warn('Faculty feedback query failed:', err.message);
       }
     }
 
-    // Sort all notifications newest first
+    // 4. Admin/Management: feedback notifications without student identity
+    if (role === 'admin' || role === 'management') {
+      try {
+        const feedbackResult = await pool.query(
+          `SELECT f.id, f.comment, f.score, f.created_on as created_at,
+                  ru.display_name as faculty_name
+           FROM feedback f
+           LEFT JOIN users ru ON ru.user_id = f.receiver_user_id
+           WHERE f.created_on >= NOW() - INTERVAL '7 days'
+           ORDER BY f.created_on DESC
+           LIMIT 10`
+        );
+
+        feedbackResult.rows.forEach(f => {
+          notifications.push({
+            id: `feedback_${f.id}`,
+            type: 'feedback',
+            // ✅ Shows which faculty received it but NOT who sent it
+            title: `⭐ New Feedback for ${f.faculty_name || 'Faculty'} — ${f.score}/5`,
+            body: f.comment
+              ? f.comment.substring(0, 60) + (f.comment.length > 60 ? '...' : '')
+              : 'New feedback received',
+            created_at: f.created_at
+          });
+        });
+      } catch (err) {
+        console.warn('Admin feedback query failed:', err.message);
+      }
+    }
+
     notifications.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-
-    const result = notifications.slice(0, 15);
-    console.log('Total notifications returned:', result.length);
-
-    return res.json({ notifications: result });
+    return res.json({ notifications: notifications.slice(0, 15) });
 
   } catch (err) {
     console.error('Notifications error:', err.stack);
